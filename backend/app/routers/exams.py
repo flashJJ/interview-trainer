@@ -261,7 +261,12 @@ def start_exam(
         .first()
     )
     if session is None:
-        session = ExamSession(user_id=current_user.id, paper_id=paper.id, status="in_progress")
+        session = ExamSession(
+            user_id=current_user.id,
+            paper_id=paper.id,
+            status="in_progress",
+            mode=json.loads(paper.config or "{}").get("mode", "exam"),
+        )
         db.add(session)
         db.commit()
         db.refresh(session)

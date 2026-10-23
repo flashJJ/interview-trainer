@@ -317,3 +317,31 @@ export interface TestConnectionResult {
   detail: string
   error: string
 }
+
+// ===== 错题本 =====
+
+export interface WrongQuestionItem {
+  id: number
+  question_id: number
+  content: string
+  q_type: QType
+  options: string[] | null
+  answer: string
+  explanation: string
+  difficulty: Difficulty
+  entry_title: string | null
+  error_count: number
+  interval_days: number
+  repetitions: number
+  due_date: string
+  days_until_due: number
+  last_error_at: string | null
+}
+
+export interface WrongQuestionStats {
+  total: number
+  due_today: number
+  overdue: number
+  due_next_7_days: number
+  by_type: Record<string, number>
+}

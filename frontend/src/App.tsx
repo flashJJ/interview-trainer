@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import KnowledgeBase from './pages/KnowledgeBase'
 import QuestionBank from './pages/QuestionBank'
 import Practice from './pages/Practice'
+import WrongQuestions from './pages/WrongQuestions'
 import ExamSession from './pages/ExamSession'
 import ExamResult from './pages/ExamResult'
 import QuestionAnalytics from './pages/QuestionAnalytics'
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/questions" element={<QuestionBank />} />
         <Route path="/practice" element={<Practice />} />
+        <Route path="/wrong-questions" element={<WrongQuestions />} />
         <Route path="/exam/:paperId" element={<ExamSession />} />
         <Route path="/result/:sessionId" element={<ExamResult />} />
         <Route path="/analytics/questions" element={<QuestionAnalytics />} />

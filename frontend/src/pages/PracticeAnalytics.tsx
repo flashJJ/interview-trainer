@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { Card, Col, Empty, Row, Skeleton, Statistic, Table, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import ReactECharts from 'echarts-for-react'
-import { analyticsApi } from '../api/client'
+import { analyticsApi, wrongQuestionsApi } from '../api/client'
 import type {
   PracticeByTypeItem,
   PracticeOverview,
   PracticeTrendItem,
   SessionListItem,
+  WrongQuestionStats,
 } from '../api/types'
 import { fmtDuration, fmtTime, pct, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/constants'
 
@@ -17,21 +18,24 @@ export default function PracticeAnalytics() {
   const [trend, setTrend] = useState<PracticeTrendItem[] | null>(null)
   const [byType, setByType] = useState<PracticeByTypeItem[] | null>(null)
   const [recent, setRecent] = useState<SessionListItem[] | null>(null)
+  const [wrongStats, setWrongStats] = useState<WrongQuestionStats | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ov, tr, bt, rc] = await Promise.all([
+      const [ov, tr, bt, rc, ws] = await Promise.all([
         analyticsApi.practiceOverview(),
         analyticsApi.practiceTrend(30),
         analyticsApi.practiceByType(),
         analyticsApi.practiceRecent(10),
+        wrongQuestionsApi.stats().catch(() => null),
       ])
       setOverview(ov)
       setTrend(tr.items)
       setByType(bt.items)
       setRecent(rc.items)
+      setWrongStats(ws)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '获取做题分析数据失败')
     } finally {
@@ -195,6 +199,39 @@ export default function PracticeAnalytics() {
               title="最佳得分率"
               value={pct(overview?.best_score_rate)}
               valueStyle={{ color: '#fa8c16' }}
+              loading={loading}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="错题总数"
+              value={wrongStats?.total ?? 0}
+              valueStyle={{ color: '#cf1322' }}
+              loading={loading}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="今日待复习"
+              value={wrongStats?.due_today ?? 0}
+              valueStyle={{ color: '#fa8c16' }}
+              loading={loading}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="已逾期错题"
+              value={wrongStats?.overdue ?? 0}
+              valueStyle={{ color: '#cf1322' }}
               loading={loading}
             />
           </Card>

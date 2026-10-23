@@ -206,6 +206,31 @@ def main() -> None:
         resp = client.get("/exams/sessions", headers=headers)
         check("历史考试列表", resp.json()["total"] >= 1)
 
+        # ---------- 5.5 错题本（SM-2） ----------
+        print("[5.5] 错题本")
+        resp = client.get("/wrong-questions/stats", headers=headers)
+        stats = resp.json()
+        check("错题本统计", resp.status_code == 200 and stats["total"] > 0, resp.text[:100])
+        check("统计含到期分布", all(k in stats for k in ("due_today", "overdue", "due_next_7_days")))
+
+        resp = client.get("/wrong-questions?size=5", headers=headers)
+        check("错题本列表", resp.status_code == 200 and len(resp.json()["items"]) > 0)
+        wrong_items = resp.json()["items"]
+        first_wrong = wrong_items[0]
+        check("错题含排期信息", "days_until_due" in first_wrong and "error_count" in first_wrong)
+
+        # 首次入本间隔 1 天（明天才到期），当前无到期错题应明确报错
+        resp = client.post("/wrong-questions/review/generate", json={"count": 5}, headers=headers)
+        check("无到期错题时组卷明确报错", resp.status_code == 400 and "到期" in resp.json()["detail"], resp.text[:100])
+
+        resp = client.post(f"/wrong-questions/{first_wrong['id']}/master", headers=headers)
+        check("标记掌握", resp.status_code == 200)
+        resp = client.get("/wrong-questions/stats", headers=headers)
+        check("掌握后错题数减一", resp.json()["total"] == stats["total"] - 1)
+
+        resp = client.delete(f"/wrong-questions/{wrong_items[1]['id']}", headers=headers)
+        check("移出错题本", resp.status_code == 200)
+
         # ---------- 6. 分析看板 ----------
         print("[6] 分析看板")
         resp = client.get("/analytics/questions/overview", headers=headers)

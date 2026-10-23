@@ -129,10 +129,14 @@ _TABLES = (
 
 
 def reset_all() -> None:
-    """清空关系库与向量库（--reset 专用）。"""
+    """清空关系库与向量库（--reset 专用）。表结构整体重建以兼容 schema 变更。"""
+    from app import models
+
     with engine.begin() as conn:
         for table in _TABLES:
             conn.execute(text(f"DELETE FROM {table}"))
+    models.Base.metadata.drop_all(bind=engine)
+    models.Base.metadata.create_all(bind=engine)
     settings = get_settings()
     client = chromadb.PersistentClient(
         path=settings.chroma_dir,

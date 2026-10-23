@@ -157,6 +157,15 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   });
   await page.screenshot({ path: `${OUT}/09-settings.png`, fullPage: true });
 
+  await step('错题本页渲染（统计卡 + SM-2 排期列表）', async () => {
+    await menuClick(/错\s*题\s*本/);
+    await page.getByText('错题本').first().waitFor({ timeout: 10000 });
+    await page.getByText('错题总数').first().waitFor({ timeout: 5000 });
+    await page.locator('table').first().waitFor({ timeout: 5000 });
+    await page.waitForTimeout(1500);
+  });
+  await page.screenshot({ path: `${OUT}/10-wrong-questions.png`, fullPage: true });
+
   await browser.close();
 
   console.log(report.join('\n'));

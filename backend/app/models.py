@@ -1,15 +1,17 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -154,6 +156,7 @@ class ExamSession(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     paper_id = Column(Integer, ForeignKey("exam_papers.id"), nullable=False, index=True)
     status = Column(String(20), default="in_progress", index=True)  # in_progress | submitted
+    mode = Column(String(20), default="exam", index=True)  # exam | review（错题复习）
     started_at = Column(DateTime, default=datetime.utcnow)
     submitted_at = Column(DateTime, nullable=True)
     total_score = Column(Float, default=0.0)
@@ -179,4 +182,24 @@ class ExamAnswer(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("ExamSession", back_populates="answers")
+    question = relationship("Question")
+
+
+class WrongQuestion(Base):
+    """错题本：答错的题目 + SM-2 间隔重复排期。"""
+
+    __tablename__ = "wrong_questions"
+    __table_args__ = (UniqueConstraint("user_id", "question_id", name="uq_wrong_user_question"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
+    error_count = Column(Integer, default=1)
+    last_error_at = Column(DateTime, default=datetime.utcnow)
+    easiness = Column(Float, default=2.5)        # SM-2 难易度系数 EF
+    interval_days = Column(Integer, default=1)   # 当前复习间隔（天）
+    repetitions = Column(Integer, default=0)     # 连续答对次数
+    due_date = Column(Date, default=date.today)  # 下次复习日期
+    created_at = Column(DateTime, default=datetime.utcnow)
+
     question = relationship("Question")

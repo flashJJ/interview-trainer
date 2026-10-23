@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .database import init_db
-from .routers import analytics, auth, exams, knowledge, questions
+from .routers import analytics, auth, exams, knowledge, questions, settings, wrong_questions
 from .routers import settings as settings_router
 from .services.runtime import get_embeddings, get_llm
 
@@ -43,6 +43,7 @@ app.include_router(questions.router, prefix=settings.api_prefix)
 app.include_router(exams.router, prefix=settings.api_prefix)
 app.include_router(analytics.router, prefix=settings.api_prefix)
 app.include_router(settings_router.router, prefix=settings.api_prefix)
+app.include_router(wrong_questions.router, prefix=settings.api_prefix)
 
 
 @app.get("/api/health")

@@ -1,6 +1,6 @@
 """Pydantic 出入参模型（API 契约的代码化）。"""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -381,3 +381,41 @@ class TestConnectionOut(BaseModel):
 class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str = Field(min_length=6, max_length=72)
+
+
+# ---------------------------------------------------------------- 错题本
+class WrongQuestionItem(BaseModel):
+    id: int
+    question_id: int
+    content: str
+    q_type: str
+    options: Optional[List[str]] = None
+    answer: str
+    explanation: str
+    difficulty: str
+    entry_title: Optional[str] = None
+    error_count: int
+    interval_days: int
+    repetitions: int
+    due_date: date
+    days_until_due: int  # 负数表示已逾期
+    last_error_at: Optional[datetime] = None
+
+
+class WrongQuestionListOut(BaseModel):
+    items: List[WrongQuestionItem]
+    total: int
+    page: int
+    size: int
+
+
+class WrongQuestionStatsOut(BaseModel):
+    total: int
+    due_today: int
+    overdue: int
+    due_next_7_days: int
+    by_type: dict
+
+
+class ReviewGenerateIn(BaseModel):
+    count: int = Field(default=10, ge=1, le=50)

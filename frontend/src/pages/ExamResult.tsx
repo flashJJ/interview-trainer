@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Card, Col, Descriptions, Empty, Radio, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
+import { CarryOutOutlined } from '@ant-design/icons'
 import { examApi } from '../api/client'
 import type { SessionDetailResp, SubmitResultItem } from '../api/types'
 import {
@@ -119,6 +120,11 @@ export default function ExamResult() {
                 <Tag color={q.ai_source === 'llm' ? 'magenta' : 'default'}>
                   {q.ai_source === 'llm' ? 'AI 评分' : '规则评分'}
                 </Tag>
+                {!q.is_correct && (
+                  <Tag color="orange" icon={<CarryOutOutlined />}>
+                    已计入错题本
+                  </Tag>
+                )}
               </Space>
             }
           >

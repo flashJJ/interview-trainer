@@ -239,6 +239,11 @@ def grade_and_submit_session(db, session, answers_map: dict[int, str], grader: G
     session.duration_sec = max(0, int((submitted_at - session.started_at).total_seconds()))
     db.commit()
 
+    # 错题本与 SM-2 排期维护（提交后自动执行）
+    from .srs import update_after_submit
+
+    update_after_submit(db, session, results)
+
     return {
         "session_id": session.id,
         "total_score": session.total_score,
