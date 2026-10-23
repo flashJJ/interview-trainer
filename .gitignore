@@ -17,3 +17,6 @@ dist/
 .idea/
 .vscode/
 .DS_Store
+
+# 推送脚本（含环境相关配置，不入库）
+backend/scripts/github_push*.py
