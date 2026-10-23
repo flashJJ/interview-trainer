@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Alert, Button, Card, Empty, Form, Input, Modal, Radio, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
-import { App as AntdApp } from 'antd'
+import {
+  Alert,
+  App as AntdApp,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  Modal,
+  Radio,
+  Row,
+  Space,
+  Spin,
+  Statistic,
+  Tag,
+  Typography,
+} from 'antd'
 import { CheckCircleOutlined } from '@ant-design/icons'
 import { examApi } from '../api/client'
 import type { ExamQuestion } from '../api/types'
@@ -28,15 +43,87 @@ export default function ExamSession() {
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [form] = Form.useForm<{ answers: Record<string, string> }>()
+  const [form] = Form.useForm()
+  // 已作答的题目 id 集合（字符串形式）。
+  // 注意：不使用 Form.useWatch 监听嵌套字段 answers.${id}——
+  // rc-field-form 的 useWatch 对动态注册的数字段字段存在更新失效问题，
+  // 会导致"选了题但提交为空"。改为 getFieldsValue 主动读取 + onValuesChange 驱动刷新。
+  const [filledIds, setFilledIds] = useState<Set<string>>(new Set())
 
-  const answers = Form.useWatch<Record<string, string>>('answers', form) ?? {}
+  const sessionIdRef = useRef<number | null>(null)
+  sessionIdRef.current = sessionId
+  const submittedRef = useRef(false)
+  const saveTimerRef = useRef<number | null>(null)
 
+  /** 从表单 store 主动读取全部答案（key 为 question_id 字符串）。
+   *  字段名使用无点号的扁平名 answer_${id}：rc-field-form 对含数字段的
+   *  点号嵌套名（answers.43）会存成扁平键而非嵌套对象，导致读取为空。 */
+  const readAnswers = useCallback((): Record<string, string> => {
+    const values = form.getFieldsValue(true)
+    const map: Record<string, string> = {}
+    for (const [key, value] of Object.entries(values ?? {})) {
+      const matched = /^answer_(\d+)$/.exec(key)
+      if (matched && typeof value === 'string') {
+        map[matched[1]] = value
+      }
+    }
+    return map
+  }, [form])
+
+  /** 根据当前表单值刷新"已作答"集合。 */
+  const refreshFilled = useCallback(() => {
+    const map = readAnswers()
+    const ids = new Set<string>()
+    for (const [key, value] of Object.entries(map)) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        ids.add(key)
+      }
+    }
+    setFilledIds(ids)
+  }, [readAnswers])
+
+  /** 构造自动保存 payload（只带题目 id 的数字键）。 */
+  const buildSavePayload = useCallback(() => {
+    const map = readAnswers()
+    return Object.entries(map)
+      .filter(([key, value]) => /^\d+$/.test(key) && typeof value === 'string' && value.trim().length > 0)
+      .map(([key, value]) => ({ question_id: Number(key), answer: value.trim() }))
+  }, [readAnswers])
+
+  /** 防抖自动保存（作答变化 1.5s 后）。 */
+  const scheduleSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current)
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      const payload = buildSavePayload()
+      if (payload.length > 0 && sessionIdRef.current != null) {
+        void examApi.save(sessionIdRef.current, payload).catch(() => {
+          /* 静默失败：不打断作答，提交时以整卷答案为准 */
+        })
+      }
+    }, 1500)
+  }, [buildSavePayload])
+
+  // 离开页面时取消待保存的定时器，并尽力保存最后一次作答（已提交的会话不再保存）
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current)
+      }
+      if (submittedRef.current) return
+      const payload = buildSavePayload()
+      if (payload.length > 0 && sessionIdRef.current != null) {
+        void examApi.save(sessionIdRef.current, payload).catch(() => {})
+      }
+    }
+  }, [buildSavePayload])
+
+  // 载入考卷与会话（重复进入返回同一未提交会话，实现断点续考）
   useEffect(() => {
     if (!paperId) return
     let cancelled = false
     setLoading(true)
-    // 并行获取考卷标题与考试会话（重复进入会返回同一未提交会话，实现断点续考）
     Promise.all([examApi.start(Number(paperId)), examApi.getPaper(Number(paperId))])
       .then(([startResp, paperResp]) => {
         if (cancelled) return
@@ -45,9 +132,11 @@ export default function ExamSession() {
         setPaperTitle(paperResp.paper.title)
         const prefilled: Record<string, string> = {}
         for (const a of startResp.answers) {
-          prefilled[String(a.question_id)] = a.user_answer
+          prefilled[`answer_${a.question_id}`] = a.user_answer
         }
+        // setFieldsValue 不会触发 onValuesChange，需手动刷新已答状态
         form.setFieldsValue({ answers: prefilled })
+        refreshFilled()
         if (startResp.answers.length > 0) {
           message.info(`已恢复 ${startResp.answers.length} 道题的已保存答案`)
         }
@@ -63,56 +152,23 @@ export default function ExamSession() {
     return () => {
       cancelled = true
     }
-  }, [paperId, form, navigate])
+  }, [paperId, form, navigate, refreshFilled, message])
 
-  const filledCount = questions.filter((q) => {
-    const v = answers[String(q.id)]
-    return typeof v === 'string' && v.trim().length > 0
-  }).length
-
-  // ---- 断点续考：防抖自动保存作答进度（仅进行中的会话）----
-  const answersRef = useRef(answers)
-  answersRef.current = answers
-
-  const buildSavePayload = useCallback(() => {
-    return Object.entries(answersRef.current)
-      .filter(([, v]) => typeof v === 'string' && v.trim().length > 0)
-      .map(([qid, v]) => ({ question_id: Number(qid), answer: v.trim() }))
-  }, [])
-
-  useEffect(() => {
-    if (sessionId == null) return
-    const timer = setTimeout(() => {
-      const payload = buildSavePayload()
-      if (payload.length === 0) return
-      void examApi.save(sessionId, payload).catch(() => {
-        /* 静默失败：不打断作答，提交时以整卷答案为准 */
-      })
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [answers, sessionId, buildSavePayload])
-
-  // 离开页面时尽力保存最后一次作答
-  useEffect(() => {
-    if (sessionId == null) return
-    const id = sessionId
-    return () => {
-      const payload = buildSavePayload()
-      if (payload.length > 0) {
-        void examApi.save(id, payload).catch(() => {})
-      }
-    }
-  }, [sessionId, buildSavePayload])
+  const filledCount = filledIds.size
+  const isAnswered = (questionId: number) => filledIds.has(String(questionId))
 
   const onSubmit = async () => {
     if (sessionId == null) return
     setSubmitting(true)
     try {
+      // 提交前从表单 store 主动读取，确保拿到最新答案
+      const map = readAnswers()
       const payload = questions.map((q) => ({
         question_id: q.id,
-        answer: (answers[String(q.id)] ?? '').trim(),
+        answer: (map[String(q.id)] ?? '').trim(),
       }))
       const result = await examApi.submit(sessionId, payload)
+      submittedRef.current = true
       message.success(
         `提交成功：得分 ${result.total_score}/${result.max_score}（${(result.score_rate * 100).toFixed(1)}%）`,
       )
@@ -134,7 +190,7 @@ export default function ExamSession() {
           <Typography.Text strong>第 {index + 1} 题</Typography.Text>
           <Tag color={Q_TYPE_COLOR[q.q_type]}>{Q_TYPE_TEXT[q.q_type]}</Tag>
           <Tag color={DIFFICULTY_COLOR[q.difficulty]}>{DIFFICULTY_TEXT[q.difficulty]}</Tag>
-          {answers[String(q.id)] && (
+          {isAnswered(q.id) && (
             <Tag icon={<CheckCircleOutlined />} color="success">
               已作答
             </Tag>
@@ -146,7 +202,7 @@ export default function ExamSession() {
         {q.content}
       </Typography.Paragraph>
       {q.q_type === 'choice' && (
-        <Form.Item name={`answers.${q.id}`} noStyle>
+        <Form.Item name={`answer_${q.id}`} noStyle>
           <Radio.Group style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {(q.options ?? []).map((opt) => (
               <Radio key={opt} value={opt} style={{ marginLeft: 0 }}>
@@ -157,7 +213,7 @@ export default function ExamSession() {
         </Form.Item>
       )}
       {q.q_type === 'judge' && (
-        <Form.Item name={`answers.${q.id}`} noStyle>
+        <Form.Item name={`answer_${q.id}`} noStyle>
           <Radio.Group style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {JUDGE_OPTIONS.map((opt) => (
               <Radio key={opt.value} value={opt.value} style={{ marginLeft: 0 }}>
@@ -168,7 +224,7 @@ export default function ExamSession() {
         </Form.Item>
       )}
       {q.q_type === 'fill' && (
-        <Form.Item name={`answers.${q.id}`} noStyle>
+        <Form.Item name={`answer_${q.id}`} noStyle>
           <Input style={{ width: 400 }} placeholder="请输入答案" />
         </Form.Item>
       )}
@@ -207,7 +263,15 @@ export default function ExamSession() {
         style={{ marginBottom: 16 }}
       />
 
-      <Form form={form} layout="vertical" disabled={submitting}>
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={submitting}
+        onValuesChange={() => {
+          refreshFilled()
+          scheduleSave()
+        }}
+      >
         {questions.map((q, i) => renderQuestion(q, i))}
       </Form>
 

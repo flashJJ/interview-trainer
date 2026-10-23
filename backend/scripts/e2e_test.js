@@ -91,17 +91,59 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await page.getByRole('button', { name: /生\s*成\s*考\s*卷/ }).click();
     await page.waitForURL('**/exam/**', { timeout: 15000 });
     await page.getByRole('button', { name: /提\s*交\s*答\s*卷/ }).waitFor({ timeout: 10000 });
+
     const radios = await page.$$('.ant-radio-input');
     if (radios.length > 0) await radios[0].check();
     const inputs = await page.$$('input[placeholder="请输入答案"]');
     if (inputs.length > 0) await inputs[0].fill('布隆过滤器');
-    await page.waitForTimeout(2200); // 等待防抖自动保存
+    await page.waitForTimeout(600);
+
+    // 断言 1：「已作答」统计 > 0（修复 useWatch 失效前这里恒为 0）
+    const answeredStat = page.locator('.ant-statistic').filter({ hasText: '已作答' }).locator('.ant-statistic-content-value');
+    const answeredCount = Number((await answeredStat.textContent()) ?? '0');
+    if (!(answeredCount > 0)) {
+      throw new Error(`「已作答」统计为 ${answeredCount}，答案选择未生效`);
+    }
+
+    // 断言 2：改选答案后提交，提交的必须是改选后的值（覆盖"改了但提交旧值/空值"场景）
+    let expectedAnswer = '';
+    if (radios.length > 1) {
+      await radios[1].check();
+      expectedAnswer = await page.evaluate(() => document.querySelectorAll('.ant-radio-input')[1]?.value ?? '');
+    } else if (inputs.length > 0) {
+      expectedAnswer = '布隆过滤器';
+    }
+
     await page.screenshot({ path: `${OUT}/07-exam.png` });
     await page.getByRole('button', { name: /提\s*交\s*答\s*卷/ }).click();
     await page.getByText('确认提交答卷').waitFor({ timeout: 5000 });
+    const modalText = await page.locator('.ant-modal-body').innerText();
+    const matched = modalText.match(/已作答\s*(\d+)\s*题/);
+    if (!matched || Number(matched[1]) <= 0) {
+      throw new Error(`确认弹窗未显示已作答题目：${modalText.slice(0, 80)}`);
+    }
     await page.getByRole('button', { name: /确\s*认\s*提\s*交/ }).click();
     await page.waitForURL('**/result/**', { timeout: 20000 });
     await page.getByText('得分率').first().waitFor({ timeout: 10000 });
+
+    // 断言 3：从 API 拉取成绩，确认提交的 user_answer 非空，且改选/填写的值确实出现在提交记录中
+    const sessionId = page.url().split('/result/')[1];
+    const detail = await page.evaluate(async (sid) => {
+      const token = localStorage.getItem('it_token');
+      const resp = await fetch(`/api/exams/sessions/${sid}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return resp.json();
+    }, sessionId);
+    const answered = detail.results.filter((r) => r.user_answer && r.user_answer.trim());
+    if (answered.length === 0) {
+      throw new Error('提交后所有题目的 user_answer 均为空——答案丢失');
+    }
+    if (expectedAnswer && !answered.some((r) => r.user_answer === expectedAnswer)) {
+      throw new Error(
+        `提交记录中找不到所选答案「${expectedAnswer}」：${JSON.stringify(answered.map((r) => r.user_answer))}`,
+      );
+    }
     await page.waitForTimeout(1500);
   });
   await page.screenshot({ path: `${OUT}/08-result.png`, fullPage: true });
