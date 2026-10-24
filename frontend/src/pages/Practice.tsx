@@ -14,6 +14,7 @@ import {
   QTYPES,
   Q_TYPE_TEXT,
 } from '../utils/constants'
+import { stickyTableConfig } from '../utils/stickyTable'
 
 interface GenForm {
   title?: string
@@ -163,6 +164,7 @@ export default function Practice() {
           dataSource={rows}
           loading={loading}
           scroll={{ x: 900 }}
+          sticky={stickyTableConfig}
           pagination={{
             current: page,
             pageSize: size,

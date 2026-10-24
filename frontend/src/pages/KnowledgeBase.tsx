@@ -23,6 +23,7 @@ import GenerateQuestionsModal, {
 } from '@/components/knowledge/GenerateQuestionsModal'
 import { EntryStatusTag } from '@/components/common/StatusTags'
 import { fmtTime, SOURCE_TYPE_TEXT } from '@/utils/constants'
+import { stickyTableConfig } from '@/utils/stickyTable'
 
 export default function KnowledgeBase() {
   const { message } = AntdApp.useApp()
@@ -272,6 +273,7 @@ export default function KnowledgeBase() {
           dataSource={rows}
           loading={loading}
           scroll={{ x: 1200 }}
+          sticky={stickyTableConfig}
           pagination={{
             current: page,
             pageSize: size,

@@ -127,16 +127,27 @@ export default function AppLayout() {
             </Space>
           </Dropdown>
         </Header>
+        {/*
+          内边距交给白色卡片自己承担（padding: 24）。
+          Content 自身不能有 padding：Chrome 计算 position: sticky 的约束矩形时
+          会把滚动容器的内边距算进去，导致固定表头吸附位置比内容区顶部低 24px，
+          滚动的行会从这条缝里露出来。
+        */}
         <Content
           style={{
             flex: 1,
             minHeight: 0,
             overflow: 'auto',
             margin: 24,
-            padding: 24,
             background: '#f5f5f5',
           }}
         >
+          {/*
+            注意：这里不能加 overflow: 'hidden'。
+            它会为 position: sticky 建立新的滚动容器（且自身不滚动），
+            导致 Table 的固定表头失效（表头会跟着内容一起滚走）。
+            横向溢出由各页 Table 的 scroll={{ x }} 自行处理。
+          */}
           <div
             style={{
               background: '#fff',
@@ -144,7 +155,6 @@ export default function AppLayout() {
               padding: 24,
               minHeight: '100%',
               maxWidth: '100%',
-              overflow: 'hidden',
             }}
           >
             <Outlet />
