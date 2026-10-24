@@ -401,6 +401,119 @@ def main() -> None:
         resp = client.get(f"/chat/sessions?question_id={target_qid}", headers=headers)
         check("题目会话列表", resp.status_code == 200 and len(resp.json()) >= 1)
 
+        # ---------- 7.6 检索与评测 ----------
+        print("[7.6] 混合检索与评测")
+        resp = client.get("/retrieval/overview", headers=headers)
+        check(
+            "检索评测概览",
+            resp.status_code == 200 and resp.json()["chunk_count"] >= 1,
+            resp.text[:120],
+        )
+
+        # 三种模式都能检索（强制用关键词模式跑，避免依赖 embedding 配置）
+        for mode, expect_channel in (("hybrid", None), ("bm25", "bm25"), ("vector", "vector")):
+            resp = client.post(
+                "/knowledge/search",
+                json={"query": "缓存 协商 ETag", "top_k": 3, "mode": mode},
+                headers=headers,
+            )
+            body = resp.json() if resp.status_code == 200 else {}
+            ok = resp.status_code == 200 and body.get("mode") == mode
+            if expect_channel and body.get("results"):
+                ok = ok and expect_channel in body["results"][0]["channels"]
+            check(f"检索模式 {mode}", ok, resp.text[:120])
+
+        resp = client.post(
+            "/knowledge/search", json={"query": "缓存", "mode": "unknown"}, headers=headers
+        )
+        check("非法模式回落为 hybrid", resp.status_code == 200 and resp.json()["mode"] == "hybrid")
+
+        resp = client.post("/retrieval/cases/auto", json={"count": 3, "use_llm": False}, headers=headers)
+        check("自动生成评测集", resp.status_code == 200 and resp.json()["created"] >= 1, resp.text[:120])
+
+        resp = client.get("/retrieval/cases", headers=headers)
+        cases = resp.json() if resp.status_code == 200 else []
+        check("评测集列表", resp.status_code == 200 and len(cases) >= 1)
+        check(
+            "评测用例含期望块",
+            bool(cases) and len(cases[0]["expected_ids"]) >= 1 and bool(cases[0]["expected_preview"]),
+            str(cases[:1])[:120],
+        )
+
+        resp = client.post(
+            "/retrieval/run",
+            json={"top_k": 5, "use_rewrite": True, "vector_weight": 1.0},
+            headers=headers,
+        )
+        run = resp.json() if resp.status_code == 200 else {}
+        check("运行检索评测", resp.status_code == 200 and run.get("case_count", 0) >= 1, resp.text[:120])
+        check(
+            "三档基线指标齐全",
+            {"vector", "bm25", "hybrid"}.issubset(set(run.get("summary", {}))),
+            str(run.get("summary"))[:160],
+        )
+        check(
+            "指标取值合法(0~1)",
+            all(
+                0.0 <= m[k] <= 1.0
+                for m in run.get("summary", {}).values()
+                for k in ("recall", "mrr", "hit_at_1")
+            ),
+            str(run.get("summary"))[:160],
+        )
+        check(
+            "逐用例明细可下钻",
+            isinstance(run.get("detail"), list) and bool(run["detail"][0]["modes"]["hybrid"]["ranked"] is not None),
+            str(run.get("detail"))[:120],
+        )
+
+        resp = client.post(
+            "/retrieval/run",
+            json={"top_k": 5, "use_rewrite": False, "vector_weight": 0.5},
+            headers=headers,
+        )
+        check(
+            "融合权重被记录",
+            resp.status_code == 200 and resp.json()["vector_weight"] == 0.5,
+            resp.text[:120],
+        )
+        check(
+            "不开启改写时少一档",
+            "hybrid+rewrite" not in resp.json()["summary"],
+            str(resp.json().get("summary"))[:120],
+        )
+
+        resp = client.get("/retrieval/runs?limit=5", headers=headers)
+        check("评测历史", resp.status_code == 200 and len(resp.json()) >= 2)
+
+        run_id = resp.json()[0]["id"]
+        resp = client.get(f"/retrieval/runs/{run_id}", headers=headers)
+        check("评测明细详情", resp.status_code == 200 and "summary" in resp.json())
+
+        # 手工录入 + 删除
+        chunk_id = client.get("/retrieval/chunks", headers=headers).json()[0]["chunk_id"]
+        resp = client.post(
+            "/retrieval/cases",
+            json={"query": "强缓存和协商缓存的区别", "expected_ids": [chunk_id], "note": "smoke"},
+            headers=headers,
+        )
+        check("手工新增评测用例", resp.status_code == 201, resp.text[:120])
+        manual_id = resp.json()["id"] if resp.status_code == 201 else 0
+        resp = client.delete(f"/retrieval/cases/{manual_id}", headers=headers)
+        check("删除评测用例", resp.status_code == 200)
+
+        resp = client.post(
+            "/retrieval/cases", json={"query": "不存在的块", "expected_ids": [999999]}, headers=headers
+        )
+        check("期望块不存在被拒绝(400)", resp.status_code == 400, resp.text[:120])
+
+        resp = client.delete("/retrieval/cases", headers=headers)
+        check("清空评测集", resp.status_code == 200 and resp.json()["deleted"] >= 1, resp.text[:120])
+        check(
+            "清空后用例为 0",
+            client.get("/retrieval/cases", headers=headers).json() == [],
+        )
+
         # ---------- 8. 边界与错误处理 ----------
         print("[8] 边界与错误处理")
         resp = client.post("/knowledge/entries", json={"title": "x", "content": "太短"}, headers=headers)

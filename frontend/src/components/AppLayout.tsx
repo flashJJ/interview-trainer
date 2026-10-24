@@ -8,6 +8,7 @@ import {
   AuditOutlined,
   BarChartOutlined,
   LineChartOutlined,
+  ExperimentOutlined,
   SettingOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -60,6 +61,7 @@ export default function AppLayout() {
     { key: '/review', icon: <AuditOutlined />, label: reviewLabel },
     { key: '/analytics/questions', icon: <BarChartOutlined />, label: '题目分析' },
     { key: '/analytics/practice', icon: <LineChartOutlined />, label: '做题分析' },
+    { key: '/retrieval', icon: <ExperimentOutlined />, label: '检索评测' },
     { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
   ]
 

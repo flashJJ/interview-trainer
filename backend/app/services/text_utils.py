@@ -58,6 +58,14 @@ def _is_noise(tok: str) -> bool:
     return False
 
 
+def is_noise_token(tok: str) -> bool:
+    """公开入口：判断 token 是否为无信息量噪声（供 BM25 等检索模块复用）。
+
+    与内部 `_is_noise` 同义，避免跨模块直接引用私有函数。
+    """
+    return _is_noise(tok)
+
+
 def top_terms(texts: list[str], top_k: int = 10) -> list[str]:
     """基于词频的关键词提取（跨语料统计，过滤停用词与噪声 n-gram）。"""
     counter: Counter = Counter()

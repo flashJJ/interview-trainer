@@ -74,9 +74,13 @@ export const knowledgeApi = {
       throw new Error(errMsg(err, '删除失败'))
     }
   },
-  async search(query: string, topK = 5): Promise<SearchResp> {
+  async search(query: string, topK = 5, mode = 'hybrid'): Promise<SearchResp> {
     try {
-      const { data } = await http.post<SearchResp>('/knowledge/search', { query, top_k: topK })
+      const { data } = await http.post<SearchResp>('/knowledge/search', {
+        query,
+        top_k: topK,
+        mode,
+      })
       return data
     } catch (err) {
       throw new Error(errMsg(err, '检索失败'))
