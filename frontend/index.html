@@ -6,6 +6,14 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📝%3C/text%3E%3C/svg%3E" />
     <title>面试题训练系统</title>
     <style>
+      /* 基础重置：浏览器默认 body margin 8px 会让页面四周出现一圈白边（内容不贴合视口） */
+      html,
+      body,
+      #root {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
       /* 首屏加载占位：dev 冷编译或弱网时展示「加载中」而非白屏（React 挂载后自动替换） */
       #root:empty::before {
         content: '正在加载面试题训练系统…';
