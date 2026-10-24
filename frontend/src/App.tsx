@@ -15,6 +15,7 @@ const ExamSession = lazy(() => import('./pages/ExamSession'))
 const ExamResult = lazy(() => import('./pages/ExamResult'))
 const QuestionAnalytics = lazy(() => import('./pages/QuestionAnalytics'))
 const PracticeAnalytics = lazy(() => import('./pages/PracticeAnalytics'))
+const RetrievalReport = lazy(() => import('./pages/RetrievalReport'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 function PageLoading() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/result/:sessionId" element={<ExamResult />} />
           <Route path="/analytics/questions" element={<QuestionAnalytics />} />
           <Route path="/analytics/practice" element={<PracticeAnalytics />} />
+          <Route path="/retrieval" element={<RetrievalReport />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/knowledge" replace />} />

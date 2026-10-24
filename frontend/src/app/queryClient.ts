@@ -56,4 +56,11 @@ export const queryKeys = {
   settings: {
     config: ['settings', 'config'] as const,
   },
+  retrieval: {
+    all: ['retrieval'] as const,
+    overview: ['retrieval', 'overview'] as const,
+    cases: ['retrieval', 'cases'] as const,
+    runs: (limit: number) => ['retrieval', 'runs', limit] as const,
+    run: (id: number) => ['retrieval', 'run', id] as const,
+  },
 }
