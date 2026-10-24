@@ -142,7 +142,7 @@ export default function Review() {
     {
       title: '操作',
       key: 'action',
-      width: 210,
+      width: 220,
       fixed: 'right' as const,
       render: (_: unknown, record: Question) => (
         <Space size={4}>
@@ -159,8 +159,9 @@ export default function Review() {
             size="small"
             icon={<EditOutlined />}
             onClick={() => openEditor(record)}
+            title="编辑修正后直接通过审核"
           >
-            编辑后通过
+            编辑
           </Button>
           <Popconfirm
             title="拒绝该题"

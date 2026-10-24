@@ -125,7 +125,7 @@ export default function WrongQuestions() {
     {
       title: '操作',
       key: 'action',
-      width: 220,
+      width: 235,
       fixed: 'right' as const,
       render: (_: unknown, item: WrongQuestionItem) => (
         <Space size={4}>
@@ -293,7 +293,7 @@ export default function WrongQuestions() {
           loading={loading}
           columns={columns}
           dataSource={items}
-          scroll={{ x: 1050 }}
+          scroll={{ x: 1040 }}
           pagination={{
             current: page,
             pageSize: size,
