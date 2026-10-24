@@ -114,6 +114,82 @@ __exit__ 方法接收异常类型、异常值和追踪信息，返回 True 可�
 
 常见陷阱：装饰器内直接返回内层函数导致引用丢失；多个装饰器叠加时执行顺序是从下往上包装；闭包中循环变量的延迟绑定问题。""",
     ),
+    (
+        "HTTP 缓存与浏览器性能",
+        """HTTP 缓存分为强缓存和协商缓存。强缓存由 Cache-Control 的 max-age 和 Expires 控制，命中时浏览器直接使用本地副本，不发请求；协商缓存由 ETag 配合 If-None-Match、Last-Modified 配合 If-Modified-Since 控制，命中时服务端返回 304，只节省响应体流量。
+
+Cache-Control 常用指令：no-store 完全不缓存，no-cache 强制走协商缓存，public 允许代理服务器缓存，private 只允许浏览器缓存，immutable 表示资源内容永不变化可以长期缓存。前端工程里 HTML 通常设置为 no-cache，而带内容哈希的静态资源设置为一年加上 immutable。
+
+CDN 的原理是把静态资源分发到离用户最近的边缘节点，通过 DNS 调度或 Anycast 把请求引导到最优节点。CDN 回源指边缘节点未命中缓存时向上层或源站取数据，回源率高会拖慢响应并增加源站压力。
+
+浏览器的关键渲染路径：解析 HTML 构建 DOM 树，解析 CSS 构建 CSSOM，两者合并为渲染树，再经过布局计算几何位置、绘制生成图层、合成输出到屏幕。CSS 是阻塞渲染的资源，JavaScript 是阻塞解析的资源，因此脚本通常放在底部或加 defer、async。
+
+性能指标方面，首字节时间 TTFB 反映服务端处理速度，首次内容绘制 FCP 和最大内容绘制 LCP 反映加载体验，首次输入延迟 FID 与交互到下次绘制 INP 反映交互流畅度，累积布局偏移 CLS 反映视觉稳定性。
+
+减少重排与重绘的手段：批量修改 DOM、使用 transform 和 opacity 做动画、避免频繁读取会触发强制同步布局的属性如 offsetHeight，必要时用 requestAnimationFrame 合并多次修改。""",
+    ),
+    (
+        "JavaScript 事件循环与异步",
+        """JavaScript 是单线程语言，通过事件循环实现并发。调用栈执行同步代码，遇到异步任务时交给宿主环境处理，完成后把回调放入任务队列，调用栈清空后事件循环按规则取出回调执行。
+
+任务分为宏任务和微任务。宏任务包括 setTimeout、setInterval、I/O 回调、UI 渲染；微任务包括 Promise 的 then、queueMicrotask、MutationObserver。每执行完一个宏任务，会清空当前所有微任务队列，然后才进入下一个宏任务，因此微任务总是先于下一个宏任务执行。
+
+Promise 有三种状态：pending、fulfilled、rejected，状态一旦改变就不可逆。then 返回新的 Promise 支持链式调用，catch 捕获链路上任意一环的错误，finally 无论成功失败都会执行。
+
+async 函数返回 Promise，await 会暂停当前函数并把后续代码包装成微任务，让出调用栈给其他任务。await 后面跟非 Promise 值也会异步执行，这一点容易造成时序误判。
+
+Promise.all 全部成功才成功、有一个失败就立即失败；Promise.allSettled 等待全部结束并返回每项状态；Promise.race 返回最先结束的结果；Promise.any 返回最先成功的结果。
+
+常见异步陷阱：在 for 循环中用 var 声明循环变量导致回调拿到最终值；for 循环里依次 await 会串行执行拖慢总耗时，应改用 Promise.all 并发；未捕获的 Promise 拒绝会导致进程警告甚至退出。""",
+    ),
+    (
+        "消息队列与分布式事务",
+        """消息队列用于系统解耦、异步处理和流量削峰。生产者发送消息到 Broker，消费者按订阅关系拉取消息处理，Broker 负责持久化与重投。
+
+投递语义有三档：最多一次可能丢消息，至少一次可能重复，恰好一次实现成本极高。工程上通常选择至少一次加消费端幂等来逼近恰好一次的效果。
+
+幂等设计常见方案：用业务唯一键做数据库唯一索引，重复插入直接失败；用 Redis 记录已处理的业务 ID 并设置合理过期时间；用状态机限制流转，只有特定前置状态才能推进，重复消息因状态不匹配被忽略。
+
+消息重复的成因包括生产者重试、Broker 重投、消费者处理超时后重新入队，因此幂等是消费端的必备能力而不是可选项。
+
+消息顺序性：全局有序需要单分区单消费者，代价是吞吐受限；业务上更常见的是按业务主键哈希到同一分区保证局部有序。
+
+堆积处理：先定位是消费能力不足还是消费逻辑阻塞，短期可以扩容消费者并提高并发度，长期要优化慢查询、批量写入和下游依赖超时设置。死信队列用于收纳反复失败的消息，避免阻塞正常消费。
+
+分布式事务的常见方案：两阶段提交强一致但性能和可用性差；TCC 通过业务层的 Try、Confirm、Cancel 补偿；本地消息表把业务操作和消息写入放在同一个本地事务里，再由定时任务投递；事务消息由消息中间件保证半消息与本地事务的最终一致。""",
+    ),
+    (
+        "JVM 内存模型与垃圾回收",
+        """JVM 运行时内存分为线程私有的程序计数器、虚拟机栈、本地方法栈，以及线程共享的堆和方法区（JDK 8 之后由元空间实现）。
+
+堆是垃圾回收的主战场，通常分为新生代和老年代。新生代又分为 Eden 区和两个 Survivor 区，默认比例 8:1:1，对象优先在 Eden 分配，经过一次 Minor GC 存活的对象进入 Survivor 并增加年龄，年龄达到阈值晋升老年代。
+
+对象存活判定采用可达性分析，从 GC Roots 出发遍历引用链，不可达的对象才可回收。GC Roots 包括虚拟机栈中引用的对象、方法区静态属性引用的对象、常量引用的对象、本地方法栈中 JNI 引用的对象。
+
+引用类型分为强引用、软引用、弱引用、虚引用。软引用在内存不足时被回收，适合做缓存；弱引用在下一次 GC 时就被回收，常用于 ThreadLocal 的 key 和 WeakHashMap。
+
+垃圾回收算法包括标记清除、复制、标记整理、分代收集。新生代对象存活率低适合复制算法，老年代存活率高适合标记整理以避免内存碎片。
+
+常见收集器：Serial 单线程适合客户端场景；Parallel 关注吞吐量；CMS 关注低停顿但存在并发模式失败和内存碎片问题；G1 把堆划分为大小相等的 Region，按回收价值优先回收，可以设定目标停顿时间；ZGC 与 Shenandoah 通过染色指针和读屏障实现极低停顿。
+
+调优思路：先看 GC 日志确认是 Minor GC 频繁还是 Full GC 频繁，再结合堆内存占用、晋升速率和对象生命周期定位问题，避免盲目调大堆导致单次停顿更长。""",
+    ),
+    (
+        "Linux 性能排查与容器化",
+        """性能排查遵循自顶向下的顺序：先看整体负载，再定位是 CPU、内存、磁盘还是网络瓶颈，最后深入到进程和线程。
+
+平均负载 load average 表示运行队列和不可中断睡眠进程的数量，超过 CPU 核数说明存在排队。但负载高不一定是 CPU 问题，大量磁盘 IO 阻塞同样会推高负载。
+
+CPU 排查使用 top 或 htop 观察用户态与内核态占比：用户态高说明业务计算密集，内核态高常见于频繁系统调用或上下文切换；使用 pidstat 定位具体线程，用 perf 采样火焰图找到热点函数。
+
+内存排查看 free 的 available 而不是 free 列，buffers 与 cached 是可回收的。使用 vmstat 观察 si 与 so 判断是否发生换页，一旦频繁换页性能会断崖式下降。
+
+磁盘 IO 使用 iostat 观察 util 使用率与 await 平均等待时间，使用 iotop 定位写盘最多的进程；顺序读写远快于随机读写，机械盘上随机 IO 尤其昂贵。
+
+网络排查：ss 或 netstat 查看连接状态与队列，大量 TIME_WAIT 说明短连接过多应改用连接池，大量 CLOSE_WAIT 说明应用没正确关闭连接；抓包用 tcpdump 配合 Wireshark 分析。
+
+容器化方面，镜像分层机制要求把变化频繁的层放在后面以命中缓存，多阶段构建可以把编译环境与运行环境分离从而显著减小镜像体积。资源限制通过 cgroup 实现，CPU 用 shares 表示相对权重、quota 表示绝对上限，内存超限会触发 OOM Killer。健康检查分存活探针与就绪探针，前者失败触发重启，后者失败只摘除流量。""",
+    ),
 ]
 
 _TABLES = (
@@ -290,7 +366,54 @@ def seed() -> None:
         db.close()
 
 
+def ensure_entries() -> None:
+    """补齐 KNOWLEDGE_ENTRIES 里尚未入库的资料（--ensure 专用）。
+
+    用途：演示语料扩充后，不必重建整库（已有题目/考卷/错题本全部保留），
+    只把缺的资料做分块与向量化。新补的资料不自动出题，需要时在界面上点「生成题目」。
+    """
+    init_db()
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == DEMO_USERNAME).first()
+        if user is None:
+            print("[ensure] 演示用户不存在，请先运行 python seed.py")
+            return
+        existing = {
+            title
+            for (title,) in db.query(KnowledgeEntry.title)
+            .filter(KnowledgeEntry.user_id == user.id)
+            .all()
+        }
+        added = 0
+        for title, content in KNOWLEDGE_ENTRIES:
+            if title in existing:
+                continue
+            entry = KnowledgeEntry(
+                user_id=user.id,
+                title=title,
+                source_type="text",
+                content=content,
+                char_count=len(content),
+                status="processing",
+            )
+            db.add(entry)
+            db.commit()
+            db.refresh(entry)
+            process_entry(db, entry)
+            db.refresh(entry)
+            print(f"[ensure] 补入「{title}」：{entry.chunk_count} 块，状态 {entry.status}")
+            added += 1
+        total = db.query(KnowledgeEntry).filter(KnowledgeEntry.user_id == user.id).count()
+        print(f"[ensure] 完成：新增 {added} 条，现有 {total} 条资料")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     if "--reset" in sys.argv:
         reset_all()
-    seed()
+    if "--ensure" in sys.argv:
+        ensure_entries()
+    else:
+        seed()

@@ -1,6 +1,7 @@
 """知识库路由：录入 / 上传 / 列表 / 详情 / 重新处理 / 删除 / 语义检索 / 统计。"""
 
 import os
+import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func
@@ -21,8 +22,9 @@ from ..schemas import (
     KnowledgeUrlIn,
     SearchHit,
 )
+from ..services import retrieval
 from ..services.pipeline import process_entry
-from ..services.runtime import get_embeddings, get_vector_store
+from ..services.runtime import get_vector_store
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -226,38 +228,45 @@ def search_knowledge(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    entry_ids = [
-        row[0]
-        for row in db.query(KnowledgeEntry.id)
-        .filter(KnowledgeEntry.user_id == current_user.id)
-        .all()
-    ]
-    if not entry_ids:
-        return KnowledgeSearchOut(results=[])
-    embedding = get_embeddings().embed(payload.query)
-    hits = get_vector_store().search_chunks(embedding, top_k=payload.top_k, entry_ids=entry_ids)
+    """知识库检索：默认混合检索（向量 + BM25 + RRF 融合）。
+
+    mode 可切 vector / bm25 / hybrid —— 前两者主要用于在评测页对比效果，
+    界面上也可以让用户直观看到"纯语义"与"纯关键词"的差异。
+    """
+    started = time.perf_counter()
+    hits = retrieval.retrieve(
+        db,
+        current_user.id,
+        payload.query,
+        top_k=payload.top_k,
+        mode=payload.mode,
+        use_rewrite=payload.use_rewrite,
+    )
     titles = dict(
         db.query(KnowledgeEntry.id, KnowledgeEntry.title)
-        .filter(KnowledgeEntry.id.in_([h["entry_id"] for h in hits if h["entry_id"]]))
+        .filter(KnowledgeEntry.user_id == current_user.id)
         .all()
     )
-    results = []
-    for hit in hits:
-        try:
-            chunk_id = int(str(hit["vector_id"]).split("_")[-1])
-        except (ValueError, IndexError):
-            continue
-        results.append(
-            SearchHit(
-                chunk_id=chunk_id,
-                entry_id=hit["entry_id"],
-                entry_title=titles.get(hit["entry_id"], ""),
-                seq=hit["seq"],
-                content=hit["content"],
-                score=hit["score"],
-            )
+    results = [
+        SearchHit(
+            chunk_id=hit.chunk_id,
+            entry_id=hit.entry_id or 0,
+            entry_title=titles.get(hit.entry_id, ""),
+            seq=hit.seq,
+            content=hit.content,
+            score=round(hit.score, 6),
+            vector_score=round(hit.vector_score, 4),
+            bm25_score=round(hit.bm25_score, 4),
+            channels=hit.channels,
         )
-    return KnowledgeSearchOut(results=results)
+        for hit in hits
+    ]
+    return KnowledgeSearchOut(
+        results=results,
+        mode=payload.mode if payload.mode in retrieval.MODES else retrieval.MODE_HYBRID,
+        used_rewrite=payload.use_rewrite,
+        elapsed_ms=int((time.perf_counter() - started) * 1000),
+    )
 
 
 @router.get("/stats/overview", response_model=KnowledgeStatsOut)

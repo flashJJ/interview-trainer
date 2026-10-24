@@ -67,11 +67,20 @@ export interface SearchResultItem {
   seq: number
   content: string
   score: number
+  vector_score: number
+  bm25_score: number
+  channels: string[]
 }
 
 export interface SearchResp {
   results: SearchResultItem[]
+  mode: string
+  used_rewrite: boolean
+  elapsed_ms: number
 }
+
+/** 检索模式：向量 / BM25 / 混合 */
+export type RetrievalMode = 'vector' | 'bm25' | 'hybrid'
 
 export interface KnowledgeOverview {
   entry_count: number
@@ -368,4 +377,67 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   created_at: string
+}
+
+// ===== 检索评测 =====
+
+export interface EvalCase {
+  id: number
+  query: string
+  source: string
+  origin_chunk_id: number
+  note: string
+  created_at: string
+  expected_ids: number[]
+  expected_preview: string[]
+}
+
+export interface ModeMetrics {
+  recall: number
+  mrr: number
+  hit_at_1: number
+}
+
+export interface EvalRunBrief {
+  id: number
+  case_count: number
+  top_k: number
+  use_rewrite: boolean
+  vector_weight: number
+  elapsed_ms: number
+  created_at: string
+  summary: Record<string, ModeMetrics>
+}
+
+export interface EvalCaseModeResult {
+  ranked: number[]
+  recall: number
+  mrr: number
+  hit1: number
+}
+
+export interface EvalCaseResult {
+  case_id: number
+  query: string
+  expected: number[]
+  modes: Record<string, EvalCaseModeResult>
+}
+
+export interface EvalRun extends EvalRunBrief {
+  detail: EvalCaseResult[]
+}
+
+export interface EvalOverview {
+  case_count: number
+  chunk_count: number
+  vector_count: number
+  latest_run: EvalRunBrief | null
+}
+
+export interface ChunkPickerItem {
+  chunk_id: number
+  entry_id: number
+  entry_title: string
+  seq: number
+  preview: string
 }

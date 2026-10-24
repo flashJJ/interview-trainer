@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { App as AntdApp, Button, Card, Popconfirm, Space, Table, Tag, Typography } from 'antd'
 import { FileTextOutlined, PlusOutlined, ReloadOutlined, RobotOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { KnowledgeEntry, KnowledgeEntryDetail, SearchResultItem } from '@/api/types'
+import type {
+  KnowledgeEntry,
+  KnowledgeEntryDetail,
+  RetrievalMode,
+  SearchResultItem,
+} from '@/api/types'
 import { knowledgeApi } from '@/api/knowledge'
 import {
   useKnowledgeEntries,
@@ -50,6 +55,7 @@ export default function KnowledgeBase() {
   const [detail, setDetail] = useState<KnowledgeEntryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResultItem[] | null>(null)
+  const [searchMeta, setSearchMeta] = useState<{ mode: string; elapsed_ms: number } | null>(null)
   const [searching, setSearching] = useState(false)
   const [genTarget, setGenTarget] = useState<KnowledgeEntry | null>(null)
   const [genLoading, setGenLoading] = useState(false)
@@ -134,15 +140,16 @@ export default function KnowledgeBase() {
     }
   }
 
-  const onSearch = async (query: string) => {
+  const onSearch = async (query: string, mode: RetrievalMode = 'hybrid') => {
     if (!query) {
       message.warning('请输入检索内容')
       return
     }
     setSearching(true)
     try {
-      const data = await knowledgeApi.search(query, 5)
+      const data = await knowledgeApi.search(query, 5, mode)
       setSearchResults(data.results)
+      setSearchMeta({ mode: data.mode, elapsed_ms: data.elapsed_ms })
       if (data.results.length === 0) message.info('未检索到相关内容')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '检索失败')
@@ -257,7 +264,12 @@ export default function KnowledgeBase() {
     <div>
       <KnowledgeStats stats={stats ?? null} />
 
-      <SemanticSearchCard results={searchResults} loading={searching} onSearch={onSearch} />
+      <SemanticSearchCard
+        results={searchResults}
+        loading={searching}
+        onSearch={onSearch}
+        meta={searchMeta}
+      />
 
       <Card
         title="知识库管理"

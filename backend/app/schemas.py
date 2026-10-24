@@ -84,6 +84,8 @@ class KnowledgeListOut(BaseModel):
 class KnowledgeSearchIn(BaseModel):
     query: str = Field(min_length=2)
     top_k: int = Field(default=5, ge=1, le=20)
+    mode: str = Field(default="hybrid")  # vector | bm25 | hybrid
+    use_rewrite: bool = False
 
 
 class SearchHit(BaseModel):
@@ -93,10 +95,16 @@ class SearchHit(BaseModel):
     seq: int
     content: str
     score: float
+    vector_score: float = 0.0
+    bm25_score: float = 0.0
+    channels: List[str] = []
 
 
 class KnowledgeSearchOut(BaseModel):
     results: List[SearchHit]
+    mode: str = "hybrid"
+    used_rewrite: bool = False
+    elapsed_ms: int = 0
 
 
 class KnowledgeStatsOut(BaseModel):
@@ -476,3 +484,94 @@ class ChatMessageOut(BaseModel):
 
 class SendChatMessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
+
+
+# ---------------------------------------------------------------- 检索评测
+class EvalCaseOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    query: str
+    source: str
+    origin_chunk_id: int
+    note: str
+    created_at: datetime
+    expected_ids: List[int] = []
+    expected_preview: List[str] = []  # 期望块的正文片段，便于前端核对
+
+
+class EvalCaseCreateIn(BaseModel):
+    query: str = Field(min_length=2, max_length=500)
+    expected_ids: List[int] = Field(min_length=1)
+    note: str = ""
+
+
+class AutoBuildIn(BaseModel):
+    count: int = Field(default=12, ge=3, le=50)
+    use_llm: bool = False  # 用 LLM 生成更自然的问题；否则取块内主题句
+
+
+class AutoBuildOut(BaseModel):
+    created: int
+    skipped: int
+    total_cases: int
+
+
+class EvalRunIn(BaseModel):
+    top_k: int = Field(default=5, ge=1, le=20)
+    use_rewrite: bool = False
+    include_llm_rewrite: bool = False
+    vector_weight: float = Field(default=1.0, ge=0.0, le=2.0)
+
+
+class ModeMetrics(BaseModel):
+    recall: float
+    mrr: float
+    hit_at_1: float
+
+
+class EvalCaseResult(BaseModel):
+    case_id: int
+    query: str
+    expected: List[int]
+    modes: dict  # {模式: {ranked: [...], recall, mrr, hit1}}
+
+
+class EvalRunOut(BaseModel):
+    id: int
+    case_count: int
+    top_k: int
+    use_rewrite: bool
+    vector_weight: float = 1.0
+    elapsed_ms: int
+    created_at: datetime
+    summary: dict
+    detail: List[EvalCaseResult] = []
+
+
+class EvalRunBrief(BaseModel):
+    id: int
+    case_count: int
+    top_k: int
+    use_rewrite: bool
+    vector_weight: float = 1.0
+    elapsed_ms: int
+    created_at: datetime
+    summary: dict
+
+
+class EvalOverviewOut(BaseModel):
+    case_count: int
+    chunk_count: int
+    vector_count: int
+    latest_run: Optional[EvalRunBrief] = None
+
+
+class ChunkPickerItem(BaseModel):
+    """手工录入评测用例时的知识块候选。"""
+
+    chunk_id: int
+    entry_id: int
+    entry_title: str
+    seq: int
+    preview: str

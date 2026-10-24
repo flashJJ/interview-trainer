@@ -50,9 +50,12 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/02-knowledge.png` });
 
-  await step('知识库列表渲染（5 条种子资料）', async () => {
+  await step('知识库列表渲染（种子资料可见）', async () => {
     await page.getByText('Redis 核心知识笔记').waitFor({ timeout: 10000 });
     await page.getByText('RAG 检索增强生成基础').waitFor({ timeout: 5000 });
+    // 资料条数随 seed 扩充变化，这里只校验至少 8 条而非写死数字
+    const rowCount = await page.locator('.ant-table-tbody tr').count();
+    if (rowCount < 8) throw new Error(`知识库表格行数异常：${rowCount}`);
   });
 
   await step('网页链接录入（错误路径：不可达地址友好提示）', async () => {
@@ -259,6 +262,26 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await page.waitForTimeout(1500);
   });
   await page.screenshot({ path: `${OUT}/10-wrong-questions.png`, fullPage: true });
+
+  await step('检索评测页（混合检索对比图 + 评测集 + 明细抽屉）', async () => {
+    await menuClick(/检\s*索\s*评\s*测/);
+    await page.getByText('检索评测').first().waitFor({ timeout: 10000 });
+    await page.getByText('评测口径').waitFor({ timeout: 5000 });
+
+    // 已有评测历史时才能验证图表与明细；空库只验证页面骨架（不硬造数据）
+    const detailBtn = page.getByRole('button', { name: '明细' });
+    if ((await detailBtn.count()) > 0) {
+      await page.locator('canvas').first().waitFor({ timeout: 8000 });
+      await detailBtn.first().click();
+      await page.getByText(/评测明细/).first().waitFor({ timeout: 8000 });
+      // 明细里必须能看到逐模式的召回标记
+      await page.getByText(/^R=/).first().waitFor({ timeout: 8000 });
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(600);
+    }
+    await page.waitForTimeout(800);
+  });
+  await page.screenshot({ path: `${OUT}/12-retrieval.png`, fullPage: true });
 
   await browser.close();
 

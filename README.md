@@ -4,6 +4,7 @@
 
 - 关系数据库：**SQLite**（ORM 建模，改一个配置项即可切 PostgreSQL）
 - 向量数据库：**ChromaDB**（嵌入式持久化，语义检索 + 出题去重）
+- 检索：**混合检索**（向量 + BM25 + RRF 融合 + 查询改写），内置评测集与 Recall/MRR/Hit@1 量化报告
 - AI 双通道：配置任意 **OpenAI 兼容 API** 走真实 LLM；不配置则内置**规则引擎**全功能演示
 - 前端：React 18 + TypeScript + Vite + AntD 5 + ECharts 5
 
@@ -24,8 +25,11 @@ cd interview-trainer/backend
 python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 写入演示数据（5 条技术知识库 + 45 道题目 + 2 场历史考试）
+# 写入演示数据（10 条技术知识库 + 题目 + 2 场历史考试）
 python seed.py
+
+# 已有演示库需要补充新语料时（不重建、不重新出题）
+python seed.py --ensure
 
 # 启动服务（默认 8000 端口）
 uvicorn app.main:app --reload --port 8000
@@ -199,7 +203,7 @@ interview-trainer/
 │   ├── requirements.txt
 │   └── .env.example                   # LLM/Embedding 配置样例
 └── frontend/
-    ├── src/pages/                     # 8 个业务页面（含系统配置）
+    ├── src/pages/                     # 12 个业务页面（含系统配置、检索评测）
     └── src/api/                       # axios 客户端 + 类型定义
 ```
 
@@ -209,16 +213,21 @@ interview-trainer/
 
 **当前版本限制**：
 - SQLite 单文件，适合单用户/演示级并发（切 PostgreSQL 只需改 `DATABASE_URL`）
-- 文件上传限 `.txt` / `.md`（UTF-8，≤5MB）
+- 文件上传限 `.txt` / `.md` / `.pdf` / `.docx`（≤10MB，PDF 不做 OCR）
 - 内置规则引擎出题为术语识别/遮蔽/否定变换，质量低于 LLM（UI 有「规则生成」徽标区分）
 - 被考卷引用的题目/资料不可删除（保证历史成绩完整），需先删除对应考卷
+- 未配置真实 Embedding 时，内置向量为字符 n-gram 哈希（本质是词法匹配），
+  混合检索的收益受限——请用「检索评测」页实测后再决定向量通道权重
 
-**演进路线**：PostgreSQL + pgvector 一体化、出题人工审核流、错题本 + SM-2 间隔重复、PDF/DOCX 导入、Anki 导出、LLM 对话式讲题。
+**演进路线**：PostgreSQL + pgvector 一体化、知识点掌握度雷达与定向训练、
+检索接入出题链路、Docker Compose 一键部署、Anki 导出。
 
 ---
 
 ## 7. 演示数据说明
 
 `seed.py` 写入的内容同时可作为面试复习材料：Redis 核心知识、MySQL 索引与事务、
-React Hooks 与性能优化、RAG 检索增强生成、Python 装饰器与上下文管理器。
-重新播种：`python seed.py --reset`（清空数据库与向量库）。
+React Hooks 与性能优化、RAG 检索增强生成、Python 装饰器与上下文管理器、
+HTTP 缓存与浏览器性能、JavaScript 事件循环、消息队列与分布式事务、
+JVM 内存模型与垃圾回收、Linux 性能排查与容器化。
+重新播种：`python seed.py --reset`（清空数据库与向量库）；已入库后补充语料：`python seed.py --ensure`。

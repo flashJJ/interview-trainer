@@ -218,6 +218,64 @@ class AIChatMessage(Base):
     session = relationship("AIChatSession", back_populates="messages")
 
 
+class RetrievalEvalCase(Base):
+    """检索评测用例（ground truth）：一条查询 → 期望被召回的知识块。
+
+    期望块可以有多个（同一主题被切成多块时，命中任意一块都算对）。
+    """
+
+    __tablename__ = "retrieval_eval_cases"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    expected_ids_json = Column("expected_ids", Text, default="[]")
+    source = Column(String(20), default="auto")  # auto（从知识块生成）| manual（手工录入）
+    origin_chunk_id = Column(Integer, default=0)  # 自动生成时对应的来源块
+    note = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def expected_ids(self) -> list[int]:
+        try:
+            data = json.loads(self.expected_ids_json or "[]")
+            return [int(x) for x in data]
+        except (TypeError, ValueError):
+            return []
+
+
+class RetrievalEvalRun(Base):
+    """一次检索评测运行：多模式指标快照 + 逐用例明细。"""
+
+    __tablename__ = "retrieval_eval_runs"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    case_count = Column(Integer, default=0)
+    top_k = Column(Integer, default=5)
+    use_rewrite = Column(Boolean, default=False)
+    vector_weight = Column(Float, default=1.0)  # RRF 中向量通道权重（BM25 恒为 1.0）
+    summary_json = Column("summary", Text, default="{}")  # {模式: {recall, mrr, hit_at_1}}
+    detail_json = Column("detail", Text, default="[]")    # 逐用例逐模式明细
+    elapsed_ms = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    @property
+    def summary(self) -> dict:
+        try:
+            return json.loads(self.summary_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+
+    @property
+    def detail(self) -> list:
+        try:
+            data = json.loads(self.detail_json or "[]")
+            return data if isinstance(data, list) else []
+        except (TypeError, ValueError):
+            return []
+
+
 class WrongQuestion(Base):
     """错题本：答错的题目 + SM-2 间隔重复排期。"""
 
