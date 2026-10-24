@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Badge, Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd'
+import { Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd'
 import {
   BookOutlined,
   QuestionCircleOutlined,
@@ -27,14 +27,30 @@ export default function AppLayout() {
   const { data: questionStats } = useQuestionStats(30_000)
   const pendingCount = questionStats?.pending_count ?? 0
 
-  const reviewLabel =
-    pendingCount > 0 ? (
-      <Badge count={pendingCount} size="small" offset={[8, 0]}>
-        <span style={{ marginRight: 12 }}>题目审核</span>
-      </Badge>
-    ) : (
-      '题目审核'
-    )
+  // 自定义徽标：antd Badge 会强制 color: rgba(0,0,0,0.88)（深色侧栏上文字变黑看不清），
+  // 且其 style prop 不透传，故手写红点徽标并显式继承菜单文字颜色。
+  const reviewLabel = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'inherit' }}>
+      题目审核
+      {pendingCount > 0 && (
+        <span
+          style={{
+            background: '#ff4d4f',
+            color: '#fff',
+            borderRadius: 9,
+            fontSize: 11,
+            lineHeight: '16px',
+            padding: '0 5px',
+            minWidth: 16,
+            textAlign: 'center',
+            fontWeight: 500,
+          }}
+        >
+          {pendingCount > 99 ? '99+' : pendingCount}
+        </span>
+      )}
+    </span>
+  )
 
   const menuItems: MenuProps['items'] = [
     { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
@@ -91,7 +107,7 @@ export default function AppLayout() {
           onClick={({ key }) => navigate(key)}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ minWidth: 0 }}>
         <Header
           style={{
             background: '#fff',
@@ -109,13 +125,15 @@ export default function AppLayout() {
             </Space>
           </Dropdown>
         </Header>
-        <Content style={{ margin: 24, padding: 24, background: '#f5f5f5' }}>
+        <Content style={{ margin: 24, padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
           <div
             style={{
               background: '#fff',
               borderRadius: 8,
               padding: 24,
               minHeight: 'calc(100vh - 160px)',
+              maxWidth: '100%',
+              overflow: 'hidden',
             }}
           >
             <Outlet />
