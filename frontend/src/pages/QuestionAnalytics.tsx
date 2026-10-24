@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuestionAnalytics } from '@/hooks/useAnalytics'
 import { Card, Col, Empty, Row, Skeleton, Statistic, Table, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import ReactECharts from 'echarts-for-react'
-import { analyticsApi } from '../api/client'
 import type {
   QuestionAccuracyItem,
   QuestionsAnalyticsOverview,
@@ -23,29 +22,11 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 
 export default function QuestionAnalytics() {
   const { message } = AntdApp.useApp()
-  const [overview, setOverview] = useState<QuestionsAnalyticsOverview | null>(null)
-  const [accuracy, setAccuracy] = useState<QuestionAccuracyItem[] | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [ov, acc] = await Promise.all([
-        analyticsApi.questionsOverview(),
-        analyticsApi.questionsAccuracy(10),
-      ])
-      setOverview(ov)
-      setAccuracy(acc.items)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取题目分析数据失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理
+  const qa = useQuestionAnalytics(10)
+  const overview = qa.overview.data ?? null
+  const accuracy = qa.accuracy.data?.items ?? null
+  const loading = qa.overview.isLoading || qa.accuracy.isLoading
 
   const typePieOption = () => {
     const items = (overview?.by_type ?? []).map((d) => ({

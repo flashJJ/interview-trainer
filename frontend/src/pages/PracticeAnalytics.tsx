@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { usePracticeAnalytics } from '@/hooks/useAnalytics'
+import { useWrongStats } from '@/hooks/useWrongQuestions'
 import { Card, Col, Empty, Row, Skeleton, Statistic, Table, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import ReactECharts from 'echarts-for-react'
-import { analyticsApi, wrongQuestionsApi } from '../api/client'
 import type {
   PracticeByTypeItem,
   PracticeOverview,
@@ -14,38 +14,18 @@ import { fmtDuration, fmtTime, pct, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/c
 
 export default function PracticeAnalytics() {
   const { message } = AntdApp.useApp()
-  const [overview, setOverview] = useState<PracticeOverview | null>(null)
-  const [trend, setTrend] = useState<PracticeTrendItem[] | null>(null)
-  const [byType, setByType] = useState<PracticeByTypeItem[] | null>(null)
-  const [recent, setRecent] = useState<SessionListItem[] | null>(null)
-  const [wrongStats, setWrongStats] = useState<WrongQuestionStats | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [ov, tr, bt, rc, ws] = await Promise.all([
-        analyticsApi.practiceOverview(),
-        analyticsApi.practiceTrend(30),
-        analyticsApi.practiceByType(),
-        analyticsApi.practiceRecent(10),
-        wrongQuestionsApi.stats().catch(() => null),
-      ])
-      setOverview(ov)
-      setTrend(tr.items)
-      setByType(bt.items)
-      setRecent(rc.items)
-      setWrongStats(ws)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取做题分析数据失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理（loading/缓存/失效）
+  const practice = usePracticeAnalytics(30, 10)
+  const { data: wrongStats } = useWrongStats()
+  const overview = practice.overview.data ?? null
+  const trend = practice.trend.data?.items ?? null
+  const byType = practice.byType.data?.items ?? null
+  const recent = practice.recent.data?.items ?? null
+  const loading =
+    practice.overview.isLoading ||
+    practice.trend.isLoading ||
+    practice.byType.isLoading ||
+    practice.recent.isLoading
 
   const trendOption = () => {
     const items = trend ?? []

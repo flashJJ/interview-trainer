@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Card, Col, Descriptions, Empty, Radio, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import { CarryOutOutlined, RobotOutlined } from '@ant-design/icons'
-import { examApi } from '../api/client'
+import { useExamSession } from '@/hooks/useExams'
 import AITutorDrawer from '../components/AITutorDrawer'
 import type { SessionDetailResp, SubmitResultItem } from '../api/types'
 import {
@@ -33,26 +33,10 @@ export default function ExamResult() {
   const { message } = AntdApp.useApp()
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<SessionDetailResp | null>(null)
-
-  const load = useCallback(async () => {
-    if (!sessionId) return
-    setLoading(true)
-    try {
-      const resp = await examApi.getSession(Number(sessionId))
-      setData(resp)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取成绩详情失败')
-      navigate('/practice', { replace: true })
-    } finally {
-      setLoading(false)
-    }
-  }, [sessionId, navigate])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理
+  const { data, isLoading: loading } = useExamSession(
+    sessionId ? Number(sessionId) : null,
+  )
 
   if (loading) {
     return (

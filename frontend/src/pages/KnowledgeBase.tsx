@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Form, Input, List, Modal, Popconfirm, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, Upload } from 'antd'
 import { App as AntdApp } from 'antd'
 import {
@@ -11,7 +11,13 @@ import {
   UploadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { knowledgeApi, questionApi } from '../api/client'
+import { knowledgeApi } from '@/api/knowledge'
+import {
+  useKnowledgeEntries,
+  useKnowledgeMutations,
+  useKnowledgeStats,
+} from '@/hooks/useKnowledge'
+import { useQuestionMutations } from '@/hooks/useQuestions'
 import type {
   Difficulty,
   KnowledgeChunk,
@@ -54,12 +60,20 @@ interface GenForm {
 
 export default function KnowledgeBase() {
   const { message } = AntdApp.useApp()
-  const [stats, setStats] = useState<KnowledgeOverview | null>(null)
-  const [rows, setRows] = useState<KnowledgeEntry[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
-  const [loading, setLoading] = useState(false)
+
+  // 数据层：TanStack Query 统一管理（统计 + 列表 + 详情 + 写操作）
+  const { data: stats, refetch: refetchStats } = useKnowledgeStats()
+  const {
+    data: entryData,
+    isLoading: loading,
+    refetch: refetchEntries,
+  } = useKnowledgeEntries({ page, size })
+  const knowledgeMutations = useKnowledgeMutations()
+  const { generate } = useQuestionMutations()
+  const rows = entryData?.items ?? []
+  const total = entryData?.total ?? 0
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -82,45 +96,16 @@ export default function KnowledgeBase() {
   const [urlForm] = Form.useForm<UrlForm>()
   const [genForm] = Form.useForm<GenForm>()
 
-  const loadOverview = useCallback(async () => {
-    try {
-      const data = await knowledgeApi.overview()
-      setStats(data)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取统计失败')
-    }
-  }, [])
-
-  const loadList = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await knowledgeApi.listEntries({ page, size })
-      setRows(data.items)
-      setTotal(data.total)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [page, size])
-
-  useEffect(() => {
-    void loadOverview()
-  }, [loadOverview])
-
-  useEffect(() => {
-    void loadList()
-  }, [loadList])
-
   const onCreateText = async (values: TextForm) => {
     setCreateLoading(true)
     try {
-      await knowledgeApi.createEntry(values.title?.trim() ?? '', values.content.trim())
+      await knowledgeMutations.create.mutateAsync({
+        title: values.title?.trim() ?? '',
+        content: values.content.trim(),
+      })
       message.success('录入成功，已开始处理')
       setCreateOpen(false)
       textForm.resetFields()
-      void loadList()
-      void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '创建失败')
     } finally {
@@ -139,13 +124,11 @@ export default function KnowledgeBase() {
     }
     setCreateLoading(true)
     try {
-      await knowledgeApi.uploadEntry(uploadFile, values.title?.trim())
+      await knowledgeMutations.upload.mutateAsync({ file: uploadFile, title: values.title?.trim() })
       message.success('上传成功，已开始处理')
       setCreateOpen(false)
       uploadForm.resetFields()
       setUploadFile(null)
-      void loadList()
-      void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '上传失败')
     } finally {
@@ -156,12 +139,13 @@ export default function KnowledgeBase() {
   const onCreateUrl = async (values: UrlForm) => {
     setCreateLoading(true)
     try {
-      await knowledgeApi.createFromUrl(values.url.trim(), values.title?.trim())
+      await knowledgeMutations.createFromUrl.mutateAsync({
+        url: values.url.trim(),
+        title: values.title?.trim(),
+      })
       message.success('链接抓取成功，已开始处理')
       setCreateOpen(false)
       urlForm.resetFields()
-      void loadList()
-      void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '链接录入失败')
     } finally {
@@ -171,10 +155,8 @@ export default function KnowledgeBase() {
 
   const onReprocess = async (id: number) => {
     try {
-      await knowledgeApi.reprocess(id)
+      await knowledgeMutations.reprocess.mutateAsync(id)
       message.success('已触发重新处理')
-      void loadList()
-      void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败')
     }
@@ -182,10 +164,8 @@ export default function KnowledgeBase() {
 
   const onDelete = async (id: number) => {
     try {
-      await knowledgeApi.deleteEntry(id)
+      await knowledgeMutations.remove.mutateAsync(id)
       message.success('删除成功')
-      void loadList()
-      void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
     }
@@ -231,7 +211,7 @@ export default function KnowledgeBase() {
     }
     setGenLoading(true)
     try {
-      const resp = await questionApi.generate({
+      const resp = await generate.mutateAsync({
         entry_id: genTarget.id,
         types: values.types,
         count_per_type: values.count_per_type,
@@ -241,7 +221,6 @@ export default function KnowledgeBase() {
         `已生成 ${resp.created_count} 道题（${resp.mode === 'llm' ? 'AI 生成' : '规则生成'}）`,
       )
       setGenTarget(null)
-      void loadList()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成失败')
     } finally {
@@ -697,7 +676,7 @@ export default function KnowledgeBase() {
       </Modal>
 
       <div style={{ marginTop: 16, textAlign: 'right' }}>
-        <Button icon={<ReloadOutlined />} onClick={() => { void loadList(); void loadOverview() }}>
+        <Button icon={<ReloadOutlined />} onClick={() => { void refetchEntries(); void refetchStats() }}>
           刷新
         </Button>
       </div>

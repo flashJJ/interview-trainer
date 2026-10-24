@@ -197,6 +197,17 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   await page.screenshot({ path: `${OUT}/08-result.png`, fullPage: true });
 
   await step('AI 讲题（已配置 LLM：打开抽屉、发送消息、流式回复）', async () => {
+    // 前置检查：未配置 LLM 时跳过（讲题属于可选能力，依赖外部 API Key）
+    const llmEnabled = await page.evaluate(async () => {
+      const token = localStorage.getItem('it_token');
+      const r = await fetch('/api/settings', { headers: { Authorization: `Bearer ${token}` } });
+      const cfg = await r.json();
+      return cfg.llm_enabled;
+    });
+    if (!llmEnabled) {
+      console.log('    SKIP  未配置 LLM，跳过讲题真实链路验证');
+      return;
+    }
     // 当前在考试结果页：点第一题「问 AI」
     await page.getByRole('button', { name: /问\s*AI/ }).first().click();
     const drawer = page.getByRole('dialog');

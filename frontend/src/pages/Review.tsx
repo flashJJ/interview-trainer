@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Alert,
   App as AntdApp,
@@ -16,7 +16,7 @@ import {
   Typography,
 } from 'antd'
 import { AuditOutlined, CheckOutlined, CloseOutlined, EditOutlined } from '@ant-design/icons'
-import { questionApi } from '../api/client'
+import { useQuestionMutations, useQuestions } from '@/hooks/useQuestions'
 import type { Difficulty, QType, Question } from '../api/types'
 import { DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/constants'
 
@@ -30,43 +30,27 @@ interface EditFormValues {
 
 export default function Review() {
   const { message } = AntdApp.useApp()
-  const [loading, setLoading] = useState(true)
-  const [items, setItems] = useState<Question[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [editing, setEditing] = useState<Question | null>(null)
-  const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm<EditFormValues>()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const resp = await questionApi.list({
-        page,
-        size,
-        review_status: 'pending',
-      })
-      setItems(resp.items)
-      setTotal(resp.total)
-      setSelectedIds([])
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取待审题目失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [page, size, message])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理（待审核队列）
+  const { data: pendingData, isLoading: loading } = useQuestions({
+    page,
+    size,
+    review_status: 'pending',
+  })
+  const { review, batchReview, update } = useQuestionMutations()
+  const items = pendingData?.items ?? []
+  const total = pendingData?.total ?? 0
+  const submitting = update.isPending || review.isPending
 
   const onReview = async (id: number, action: 'approve' | 'reject') => {
     try {
-      await questionApi.review(id, action)
+      await review.mutateAsync({ id, action })
       message.success(action === 'approve' ? '已通过，进入组卷池' : '已拒绝')
-      void load()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败')
     }
@@ -75,9 +59,8 @@ export default function Review() {
   const onBatch = async (action: 'approve' | 'reject') => {
     if (selectedIds.length === 0) return
     try {
-      const result = await questionApi.batchReview(selectedIds, action)
+      const result = await batchReview.mutateAsync({ ids: selectedIds, action })
       message.success(result.message)
-      void load()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '批量操作失败')
     }
@@ -96,24 +79,20 @@ export default function Review() {
 
   const onEditSubmit = async (values: EditFormValues) => {
     if (!editing) return
-    setSubmitting(true)
     try {
-      await questionApi.update(editing.id, {
+      await update.mutateAsync({ id: editing.id, payload: {
         content: values.content,
         options: editing.q_type === 'choice' ? values.options : undefined,
         answer: values.answer,
         explanation: values.explanation,
         difficulty: values.difficulty,
-      })
+      } })
       // 编辑后直接通过审核
-      await questionApi.review(editing.id, 'approve')
+      await review.mutateAsync({ id: editing.id, action: 'approve' })
       message.success('已保存并通过审核')
       setEditing(null)
-      void load()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '保存失败')
-    } finally {
-      setSubmitting(false)
     }
   }
 

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { questionApi } from '../api/client'
+import { questionApi } from '@/api/questions'
+import { useQuestionMutations, useQuestions } from '@/hooks/useQuestions'
 import type { Difficulty, PageResp, QType, Question } from '../api/types'
 import {
   DIFFICULTIES,
@@ -27,11 +28,8 @@ type ReviewTab = 'approved' | 'pending' | 'rejected'
 
 export default function QuestionBank() {
   const { message } = AntdApp.useApp()
-  const [rows, setRows] = useState<Question[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
-  const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<FilterForm>({})
   const [reviewTab, setReviewTab] = useState<ReviewTab>('approved')
 
@@ -40,29 +38,18 @@ export default function QuestionBank() {
 
   const [form] = Form.useForm<FilterForm>()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data: PageResp<Question> = await questionApi.list({
-        page,
-        size,
-        q_type: filters.q_type,
-        difficulty: filters.difficulty,
-        keyword: filters.keyword?.trim() || undefined,
-        review_status: reviewTab,
-      })
-      setRows(data.items)
-      setTotal(data.total)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取题库列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [page, size, filters, reviewTab])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理
+  const { data: questionData, isLoading: loading } = useQuestions({
+    page,
+    size,
+    q_type: filters.q_type,
+    difficulty: filters.difficulty,
+    keyword: filters.keyword?.trim() || undefined,
+    review_status: reviewTab,
+  })
+  const { remove } = useQuestionMutations()
+  const rows = questionData?.items ?? []
+  const total = questionData?.total ?? 0
 
   const onSearch = (values: FilterForm) => {
     setPage(1)
@@ -90,9 +77,8 @@ export default function QuestionBank() {
 
   const onDelete = async (id: number) => {
     try {
-      await questionApi.remove(id)
+      await remove.mutateAsync(id)
       message.success('删除成功')
-      void load()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败')
     }
