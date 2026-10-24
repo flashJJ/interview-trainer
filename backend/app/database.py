@@ -39,8 +39,30 @@ if settings.database_url.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA busy_timeout=10000")
+        # 写-写仍互斥（WAL 只放开读-写并发），等锁上限放宽到 30s 以覆盖 LLM 长请求场景
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
+
+
+def commit_with_retry(db, retries: int = 3, base_delay: float = 0.1) -> None:
+    """提交事务，遇到 SQLite 写锁（database is locked）时退避重试。
+
+    背景：并发出题/讲题期间，草稿自动保存等短写事务可能与其他写事务
+    争抢 SQLite 写锁；busy_timeout 之外再加应用层重试，避免直接 500。
+    """
+    import time
+
+    from sqlalchemy.exc import OperationalError
+
+    for attempt in range(retries):
+        try:
+            db.commit()
+            return
+        except OperationalError as exc:
+            db.rollback()
+            if "locked" not in str(exc).lower() or attempt == retries - 1:
+                raise
+            time.sleep(base_delay * (attempt + 1))
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 

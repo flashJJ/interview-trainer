@@ -1,16 +1,8 @@
 import { useState } from 'react'
-import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Form, Input, List, Modal, Popconfirm, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, Upload } from 'antd'
-import { App as AntdApp } from 'antd'
-import {
-  BookOutlined,
-  FileTextOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  RobotOutlined,
-  SearchOutlined,
-  UploadOutlined,
-} from '@ant-design/icons'
+import { App as AntdApp, Button, Card, Popconfirm, Space, Table, Tag, Typography } from 'antd'
+import { FileTextOutlined, PlusOutlined, ReloadOutlined, RobotOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { KnowledgeEntry, KnowledgeEntryDetail, SearchResultItem } from '@/api/types'
 import { knowledgeApi } from '@/api/knowledge'
 import {
   useKnowledgeEntries,
@@ -18,52 +10,28 @@ import {
   useKnowledgeStats,
 } from '@/hooks/useKnowledge'
 import { useQuestionMutations } from '@/hooks/useQuestions'
-import type {
-  Difficulty,
-  KnowledgeChunk,
-  KnowledgeEntry,
-  KnowledgeOverview,
-  QType,
-  SearchResultItem,
-} from '../api/types'
-import {
-  DIFFICULTIES,
-  DIFFICULTY_TEXT,
-  ENTRY_STATUS_COLOR,
-  ENTRY_STATUS_TEXT,
-  fmtTime,
-  pct,
-  QTYPES,
-  Q_TYPE_TEXT,
-  SOURCE_TYPE_TEXT,
-} from '../utils/constants'
-
-interface TextForm {
-  title?: string
-  content: string
-}
-
-interface UploadForm {
-  title?: string
-}
-
-interface UrlForm {
-  url: string
-  title?: string
-}
-
-interface GenForm {
-  types: QType[]
-  count_per_type: number
-  difficulty?: Difficulty
-}
+import KnowledgeStats from '@/components/knowledge/KnowledgeStats'
+import SemanticSearchCard from '@/components/knowledge/SemanticSearchCard'
+import CreateEntryModal, {
+  type TextForm,
+  type UploadForm,
+  type UrlForm,
+} from '@/components/knowledge/CreateEntryModal'
+import EntryDetailDrawer from '@/components/knowledge/EntryDetailDrawer'
+import GenerateQuestionsModal, {
+  type GenForm,
+} from '@/components/knowledge/GenerateQuestionsModal'
+import { EntryStatusTag } from '@/components/common/StatusTags'
+import { fmtTime, SOURCE_TYPE_TEXT } from '@/utils/constants'
 
 export default function KnowledgeBase() {
   const { message } = AntdApp.useApp()
+
+  // 分页（客户端状态）
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
 
-  // 数据层：TanStack Query 统一管理（统计 + 列表 + 详情 + 写操作）
+  // 数据层：TanStack Query
   const { data: stats, refetch: refetchStats } = useKnowledgeStats()
   const {
     data: entryData,
@@ -75,26 +43,15 @@ export default function KnowledgeBase() {
   const rows = entryData?.items ?? []
   const total = entryData?.total ?? 0
 
+  // 交互状态（弹窗/抽屉/检索）
   const [createOpen, setCreateOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-
-  const [detail, setDetail] = useState<{ entry: KnowledgeEntry; chunks: KnowledgeChunk[] } | null>(
-    null,
-  )
+  const [detail, setDetail] = useState<KnowledgeEntryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResultItem[] | null>(null)
-
+  const [searching, setSearching] = useState(false)
   const [genTarget, setGenTarget] = useState<KnowledgeEntry | null>(null)
   const [genLoading, setGenLoading] = useState(false)
-
-  const [textForm] = Form.useForm<TextForm>()
-  const [uploadForm] = Form.useForm<UploadForm>()
-  const [urlForm] = Form.useForm<UrlForm>()
-  const [genForm] = Form.useForm<GenForm>()
 
   const onCreateText = async (values: TextForm) => {
     setCreateLoading(true)
@@ -105,7 +62,6 @@ export default function KnowledgeBase() {
       })
       message.success('录入成功，已开始处理')
       setCreateOpen(false)
-      textForm.resetFields()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '创建失败')
     } finally {
@@ -113,22 +69,16 @@ export default function KnowledgeBase() {
     }
   }
 
-  const onCreateUpload = async (values: UploadForm) => {
-    if (!uploadFile) {
-      message.error('请选择文件')
-      return
-    }
-    if (!/\.(txt|md|pdf|docx)$/i.test(uploadFile.name)) {
+  const onCreateUpload = async (file: File, values: UploadForm) => {
+    if (!/\.(txt|md|pdf|docx)$/i.test(file.name)) {
       message.error('仅支持 .txt / .md / .pdf / .docx 文件')
       return
     }
     setCreateLoading(true)
     try {
-      await knowledgeMutations.upload.mutateAsync({ file: uploadFile, title: values.title?.trim() })
+      await knowledgeMutations.upload.mutateAsync({ file, title: values.title?.trim() })
       message.success('上传成功，已开始处理')
       setCreateOpen(false)
-      uploadForm.resetFields()
-      setUploadFile(null)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '上传失败')
     } finally {
@@ -145,7 +95,6 @@ export default function KnowledgeBase() {
       })
       message.success('链接抓取成功，已开始处理')
       setCreateOpen(false)
-      urlForm.resetFields()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '链接录入失败')
     } finally {
@@ -184,15 +133,14 @@ export default function KnowledgeBase() {
     }
   }
 
-  const onSearch = async () => {
-    const q = searchQuery.trim()
-    if (!q) {
+  const onSearch = async (query: string) => {
+    if (!query) {
       message.warning('请输入检索内容')
       return
     }
     setSearching(true)
     try {
-      const data = await knowledgeApi.search(q, 5)
+      const data = await knowledgeApi.search(query, 5)
       setSearchResults(data.results)
       if (data.results.length === 0) message.info('未检索到相关内容')
     } catch (err) {
@@ -214,7 +162,7 @@ export default function KnowledgeBase() {
       const resp = await generate.mutateAsync({
         entry_id: genTarget.id,
         types: values.types,
-        count_per_type: values.count_per_type,
+        count_per_type: Number(values.count_per_type),
         difficulty: values.difficulty,
       })
       message.success(
@@ -246,9 +194,7 @@ export default function KnowledgeBase() {
       key: 'source_type',
       width: 80,
       render: (t: KnowledgeEntry['source_type']) => (
-        <Tag icon={t === 'file' ? <FileTextOutlined /> : undefined}>
-          {SOURCE_TYPE_TEXT[t]}
-        </Tag>
+        <Tag icon={t === 'file' ? <FileTextOutlined /> : undefined}>{SOURCE_TYPE_TEXT[t]}</Tag>
       ),
     },
     {
@@ -256,9 +202,7 @@ export default function KnowledgeBase() {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (s: KnowledgeEntry['status']) => (
-        <Tag color={ENTRY_STATUS_COLOR[s]}>{ENTRY_STATUS_TEXT[s]}</Tag>
-      ),
+      render: (s: KnowledgeEntry['status']) => <EntryStatusTag status={s} />,
     },
     { title: '块数', dataIndex: 'chunk_count', key: 'chunk_count', width: 70 },
     { title: '题目数', dataIndex: 'question_count', key: 'question_count', width: 80 },
@@ -287,14 +231,7 @@ export default function KnowledgeBase() {
             type="link"
             size="small"
             icon={<RobotOutlined />}
-            onClick={() => {
-              genForm.setFieldsValue({
-                types: [...QTYPES],
-                count_per_type: 3,
-                difficulty: undefined,
-              })
-              setGenTarget(record)
-            }}
+            onClick={() => setGenTarget(record)}
           >
             AI 出题
           </Button>
@@ -317,98 +254,9 @@ export default function KnowledgeBase() {
 
   return (
     <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic title="总条目" value={stats?.entry_count ?? 0} prefix={<BookOutlined />} />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="已处理"
-              value={stats?.ready_count ?? 0}
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic title="总块数" value={stats?.chunk_count ?? 0} />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="向量数"
-              value={stats?.vector_count ?? 0}
-              suffix={`/ ${stats?.chunk_count ?? 0}`}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <KnowledgeStats stats={stats ?? null} />
 
-      <Card
-        title="语义检索"
-        size="small"
-        style={{ marginBottom: 16 }}
-        extra={
-          <Space>
-            <Input
-              placeholder="输入要检索的内容，如：缓存穿透怎么解决"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onPressEnter={() => void onSearch()}
-              style={{ width: 320 }}
-              allowClear
-            />
-            <Button
-              type="primary"
-              icon={<SearchOutlined />}
-              loading={searching}
-              onClick={() => void onSearch()}
-            >
-              检索
-            </Button>
-          </Space>
-        }
-      >
-        {searchResults === null ? (
-          <Typography.Text type="secondary">
-            基于向量语义的检索将返回最相关的知识块（Top 5），可查看来源资料、相似度与内容摘要。
-          </Typography.Text>
-        ) : searchResults.length === 0 ? (
-          <Typography.Text type="secondary">暂无检索结果，请尝试其他关键词。</Typography.Text>
-        ) : (
-          <List
-            dataSource={searchResults}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={
-                    <Space size={8}>
-                      <Tag color="blue">{item.entry_title}</Tag>
-                      <Typography.Text type="secondary">块 #{item.seq + 1}</Typography.Text>
-                      <Badge
-                        count={`相似度 ${pct(item.score)}`}
-                        style={{ backgroundColor: '#52c41a' }}
-                      />
-                    </Space>
-                  }
-                  description={
-                    <Typography.Paragraph
-                      ellipsis={{ rows: 2, expandable: true, symbol: '展开' }}
-                      style={{ marginBottom: 0 }}
-                    >
-                      {item.content}
-                    </Typography.Paragraph>
-                  }
-                />
-              </List.Item>
-            )}
-          />
-        )}
-      </Card>
+      <SemanticSearchCard results={searchResults} loading={searching} onSearch={onSearch} />
 
       <Card
         title="知识库管理"
@@ -439,244 +287,37 @@ export default function KnowledgeBase() {
         />
       </Card>
 
-      <Modal
-        title="新建知识库"
+      <CreateEntryModal
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        afterClose={() => setUploadFile(null)}
-        footer={null}
-        width={640}
-        destroyOnHidden
-      >
-        <Tabs
-          destroyOnHidden
-          items={[
-            {
-              key: 'text',
-              label: '文本录入',
-              children: (
-                <Form<TextForm> layout="vertical" form={textForm} onFinish={onCreateText}>
-                  <Form.Item name="title" label="标题（可选，缺省取正文首行前 30 字）">
-                    <Input placeholder="请输入标题" maxLength={100} />
-                  </Form.Item>
-                  <Form.Item
-                    name="content"
-                    label="正文内容"
-                    rules={[{ required: true, message: '请输入正文内容' }]}
-                  >
-                      <Input.TextArea
-                        rows={10}
-                        placeholder="请粘贴技术笔记、文档或源码片段…"
-                        showCount
-                        maxLength={100000}
-                      />
-                  </Form.Item>
-                  <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                    <Space>
-                      <Button onClick={() => setCreateOpen(false)}>取消</Button>
-                      <Button type="primary" htmlType="submit" loading={createLoading}>
-                        提交录入
-                      </Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-              ),
-            },
-            {
-              key: 'file',
-              label: '文件上传',
-              children: (
-                <Form<UploadForm> layout="vertical" form={uploadForm} onFinish={onCreateUpload}>
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="支持 .txt / .md / .pdf / .docx，大小不超过 10MB"
-                    description="PDF 需含文本层（扫描件不支持 OCR）；DOCX 提取段落与表格文本。"
-                    style={{ marginBottom: 16 }}
-                  />
-                  <Form.Item name="title" label="标题（可选，缺省自动识别）">
-                    <Input placeholder="请输入标题" maxLength={100} />
-                  </Form.Item>
-                  <Form.Item label="选择文件" required>
-                    <Upload
-                      accept=".txt,.md,.pdf,.docx"
-                      maxCount={1}
-                      beforeUpload={(file) => {
-                        setUploadFile(file)
-                        return false
-                      }}
-                      onRemove={() => setUploadFile(null)}
-                    >
-                      <Button icon={<UploadOutlined />}>选择文件</Button>
-                    </Upload>
-                  </Form.Item>
-                  <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                    <Space>
-                      <Button onClick={() => setCreateOpen(false)}>取消</Button>
-                      <Button type="primary" htmlType="submit" loading={createLoading}>
-                        上传并处理
-                      </Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-              ),
-            },
-            {
-              key: 'url',
-              label: '网页链接',
-              children: (
-                <Form<UrlForm> layout="vertical" form={urlForm} onFinish={onCreateUrl}>
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="抓取网页正文（自动去除导航/广告/页脚）"
-                    description="需要公开可访问的 http/https 页面；需登录或纯动态渲染的页面可能提取失败。"
-                    style={{ marginBottom: 16 }}
-                  />
-                  <Form.Item
-                    name="url"
-                    label="网页链接"
-                    rules={[
-                      { required: true, message: '请输入网页链接' },
-                      {
-                        pattern: /^https?:\/\/.+/i,
-                        message: 'URL 必须以 http:// 或 https:// 开头',
-                      },
-                    ]}
-                  >
-                    <Input placeholder="例如 https://example.com/article" maxLength={2000} />
-                  </Form.Item>
-                  <Form.Item name="title" label="标题（可选，缺省取网页标题）">
-                    <Input placeholder="请输入标题" maxLength={100} />
-                  </Form.Item>
-                  <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                    <Space>
-                      <Button onClick={() => setCreateOpen(false)}>取消</Button>
-                      <Button type="primary" htmlType="submit" loading={createLoading}>
-                        抓取并处理
-                      </Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-              ),
-            },
-          ]}
-        />
-      </Modal>
+        loading={createLoading}
+        onClose={() => setCreateOpen(false)}
+        onCreateText={onCreateText}
+        onCreateUpload={onCreateUpload}
+        onCreateUrl={onCreateUrl}
+      />
 
-      <Drawer
-        title="知识库详情"
-        width={720}
-        open={detail !== null}
-        onClose={() => setDetail(null)}
+      <EntryDetailDrawer
+        detail={detail}
         loading={detailLoading}
-      >
-        {detail && (
-          <>
-            <Descriptions column={2} size="small" style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="标题">{detail.entry.title}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={ENTRY_STATUS_COLOR[detail.entry.status]}>
-                  {ENTRY_STATUS_TEXT[detail.entry.status]}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="块数">{detail.entry.chunk_count}</Descriptions.Item>
-              <Descriptions.Item label="字数">{detail.entry.char_count}</Descriptions.Item>
-              <Descriptions.Item label="创建时间" span={2}>
-                {fmtTime(detail.entry.created_at)}
-              </Descriptions.Item>
-              {detail.entry.error && (
-                <Descriptions.Item label="错误信息" span={2}>
-                  <Typography.Text type="danger">{detail.entry.error}</Typography.Text>
-                </Descriptions.Item>
-              )}
-            </Descriptions>
-            <Typography.Title level={5}>内容分块（{detail.chunks.length}）</Typography.Title>
-            <List
-              dataSource={detail.chunks}
-              locale={{ emptyText: '暂无分块' }}
-              renderItem={(chunk) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={<Space size={8}><Badge count={chunk.seq + 1} color="#2f54eb" /><Typography.Text type="secondary">{chunk.char_count} 字</Typography.Text></Space>}
-                    description={
-                      <>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                          {chunk.content}
-                        </Typography.Paragraph>
-                        <Space size={4} wrap>
-                          {chunk.keywords.map((kw) => (
-                            <Tag key={kw} color="geekblue">
-                              {kw}
-                            </Tag>
-                          ))}
-                          {chunk.keywords.length === 0 && (
-                            <Typography.Text type="secondary">暂无关键词</Typography.Text>
-                          )}
-                        </Space>
-                      </>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-          </>
-        )}
-      </Drawer>
+        onClose={() => setDetail(null)}
+      />
 
-      <Modal
-        title={`AI 出题 - ${genTarget?.title ?? ''}`}
-        open={genTarget !== null}
-        onCancel={() => setGenTarget(null)}
-        footer={null}
-        destroyOnHidden
-      >
-        <Form<GenForm>
-          layout="vertical"
-          form={genForm}
-          initialValues={{ types: [...QTYPES], count_per_type: 3 }}
-          onFinish={onGenerate}
-        >
-          <Form.Item
-            name="types"
-            label="题型（多选）"
-            rules={[{ required: true, message: '请至少选择一种题型' }]}
-          >
-            <Select mode="multiple" placeholder="请选择题型" options={QTYPES.map((t) => ({ label: Q_TYPE_TEXT[t], value: t }))} />
-          </Form.Item>
-          <Form.Item
-            name="count_per_type"
-            label="每题型数量"
-            rules={[{ required: true, message: '请输入数量' }]}
-          >
-            <Input type="number" min={1} max={10} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="difficulty" label="难度（可选）">
-            <Select
-              placeholder="不限"
-              allowClear
-              options={DIFFICULTIES.map((d) => ({ label: DIFFICULTY_TEXT[d], value: d }))}
-            />
-          </Form.Item>
-          <Alert
-            type="info"
-            showIcon
-            message="未配置 LLM API Key 时将使用内置规则引擎生成题目，质量以 UI 徽标为准。"
-            style={{ marginBottom: 16 }}
-          />
-          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setGenTarget(null)}>取消</Button>
-              <Button type="primary" htmlType="submit" icon={<RobotOutlined />} loading={genLoading}>
-                开始生成
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+      <GenerateQuestionsModal
+        key={genTarget?.id ?? 'closed'}
+        entry={genTarget}
+        loading={genLoading}
+        onClose={() => setGenTarget(null)}
+        onSubmit={onGenerate}
+      />
 
       <div style={{ marginTop: 16, textAlign: 'right' }}>
-        <Button icon={<ReloadOutlined />} onClick={() => { void refetchEntries(); void refetchStats() }}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => {
+            void refetchEntries()
+            void refetchStats()
+          }}
+        >
           刷新
         </Button>
       </div>
