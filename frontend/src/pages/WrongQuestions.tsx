@@ -12,12 +12,17 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { CarryOutOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { CarryOutOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import AITutorDrawer from '../components/AITutorDrawer'
 import { wrongQuestionsApi } from '../api/client'
 import type { Difficulty, QType, WrongQuestionItem } from '../api/types'
 import { DIFFICULTY_COLOR, DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/constants'
 
 export default function WrongQuestions() {
+  const [tutorOpen, setTutorOpen] = useState(false)
+  const [tutorQuestionId, setTutorQuestionId] = useState<number | null>(null)
+  const [tutorTitle, setTutorTitle] = useState('')
+
   const { message } = AntdApp.useApp()
   const navigate = useNavigate()
 
@@ -143,6 +148,18 @@ export default function WrongQuestions() {
       width: 160,
       render: (_: unknown, item: WrongQuestionItem) => (
         <Space size={4}>
+          <Button
+            type="link"
+            size="small"
+            icon={<RobotOutlined />}
+            onClick={() => {
+              setTutorQuestionId(item.question_id)
+              setTutorTitle(item.content)
+              setTutorOpen(true)
+            }}
+          >
+            问 AI
+          </Button>
           <Popconfirm
             title="标记掌握"
             description="将该题移出错题本，确定吗？"
@@ -182,6 +199,12 @@ export default function WrongQuestions() {
 
   return (
     <div>
+      <AITutorDrawer
+        questionId={tutorQuestionId}
+        questionTitle={tutorTitle}
+        open={tutorOpen}
+        onClose={() => setTutorOpen(false)}
+      />
       <Typography.Title level={4}>
         <CarryOutOutlined style={{ marginRight: 8 }} />
         错题本

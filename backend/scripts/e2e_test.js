@@ -196,6 +196,20 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   });
   await page.screenshot({ path: `${OUT}/08-result.png`, fullPage: true });
 
+  await step('AI 讲题入口（未配置 Key 时禁用并引导配置）', async () => {
+    // 当前在考试结果页：点第一题「问 AI」
+    await page.getByRole('button', { name: /问\s*AI/ }).first().click();
+    const drawer = page.getByRole('dialog');
+    await drawer.waitFor({ timeout: 5000 });
+    await page.getByText('AI 讲题需要配置 LLM').first().waitFor({ timeout: 10000 });
+    const tutorInput = drawer.locator('input').first();
+    if (!(await tutorInput.isDisabled())) {
+      throw new Error('未配置 LLM 时讲题输入框应禁用');
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+  });
+
   await step('系统配置页渲染（模式展示 + LLM/Embedding 表单）', async () => {
     await menuClick(/系\s*统\s*配\s*置/);
     await page.getByText('AI 模型配置').first().waitFor({ timeout: 10000 });

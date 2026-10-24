@@ -448,3 +448,31 @@ class WrongQuestionStatsOut(BaseModel):
 
 class ReviewGenerateIn(BaseModel):
     count: int = Field(default=10, ge=1, le=50)
+
+
+# ---------------------------------------------------------------- AI 讲题
+class CreateChatSessionIn(BaseModel):
+    question_id: int
+
+
+class ChatSessionOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    question_id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class ChatMessageOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+
+
+class SendChatMessageIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)

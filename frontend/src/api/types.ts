@@ -349,3 +349,20 @@ export interface WrongQuestionStats {
   due_next_7_days: number
   by_type: Record<string, number>
 }
+
+// ===== AI 讲题 =====
+
+export interface ChatSession {
+  id: number
+  question_id: number
+  title: string
+  created_at: string
+  updated_at: string | null
+}
+
+export interface ChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
