@@ -17,6 +17,7 @@ export const DIFFICULTY_TEXT: Record<Difficulty, string> = {
 export const SOURCE_TYPE_TEXT: Record<EntrySourceType, string> = {
   text: '文本',
   file: '文件',
+  url: '网页',
 }
 
 export const ENTRY_STATUS_TEXT: Record<EntryStatus, string> = {

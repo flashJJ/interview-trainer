@@ -55,6 +55,19 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await page.getByText('RAG 检索增强生成基础').waitFor({ timeout: 5000 });
   });
 
+  await step('网页链接录入（错误路径：不可达地址友好提示）', async () => {
+    await page.getByRole('button', { name: /新\s*建\s*知\s*识\s*库/ }).click();
+    const createModal = page.getByRole('dialog');
+    await createModal.waitFor({ timeout: 5000 });
+    await createModal.getByRole('tab', { name: /网\s*页\s*链\s*接/ }).click();
+    await createModal.getByPlaceholder('例如 https://example.com/article').fill('http://127.0.0.1:9/none');
+    await createModal.getByRole('button', { name: /抓\s*取\s*并\s*处\s*理/ }).click();
+    // 不可达地址应弹出友好错误（而不是白屏或无限转圈）
+    await page.getByText(/网络请求失败|抓取超时|无法连接/).first().waitFor({ timeout: 30000 });
+    await createModal.getByRole('button', { name: /取\s*消/ }).click();
+    await page.waitForTimeout(500);
+  });
+
   await step('题库页渲染', async () => {
     await menuClick(/题\s*库/);
     await page.locator('table').first().waitFor({ timeout: 10000 });

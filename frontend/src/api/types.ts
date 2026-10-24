@@ -28,7 +28,7 @@ export interface LoginResp {
 
 // ===== 知识库 =====
 
-export type EntrySourceType = 'text' | 'file'
+export type EntrySourceType = 'text' | 'file' | 'url'
 export type EntryStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
 export interface KnowledgeEntry {

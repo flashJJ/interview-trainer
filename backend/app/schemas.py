@@ -39,6 +39,11 @@ class KnowledgeEntryCreate(BaseModel):
     content: str = Field(min_length=30)
 
 
+class KnowledgeUrlIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+    title: str = ""
+
+
 class ChunkOut(BaseModel):
     model_config = {"from_attributes": True}
 

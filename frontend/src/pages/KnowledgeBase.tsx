@@ -41,6 +41,11 @@ interface UploadForm {
   title?: string
 }
 
+interface UrlForm {
+  url: string
+  title?: string
+}
+
 interface GenForm {
   types: QType[]
   count_per_type: number
@@ -74,6 +79,7 @@ export default function KnowledgeBase() {
 
   const [textForm] = Form.useForm<TextForm>()
   const [uploadForm] = Form.useForm<UploadForm>()
+  const [urlForm] = Form.useForm<UrlForm>()
   const [genForm] = Form.useForm<GenForm>()
 
   const loadOverview = useCallback(async () => {
@@ -127,8 +133,8 @@ export default function KnowledgeBase() {
       message.error('请选择文件')
       return
     }
-    if (!/\.(txt|md)$/i.test(uploadFile.name)) {
-      message.error('仅支持 .txt / .md 文件')
+    if (!/\.(txt|md|pdf|docx)$/i.test(uploadFile.name)) {
+      message.error('仅支持 .txt / .md / .pdf / .docx 文件')
       return
     }
     setCreateLoading(true)
@@ -142,6 +148,22 @@ export default function KnowledgeBase() {
       void loadOverview()
     } catch (err) {
       message.error(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const onCreateUrl = async (values: UrlForm) => {
+    setCreateLoading(true)
+    try {
+      await knowledgeApi.createFromUrl(values.url.trim(), values.title?.trim())
+      message.success('链接抓取成功，已开始处理')
+      setCreateOpen(false)
+      urlForm.resetFields()
+      void loadList()
+      void loadOverview()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '链接录入失败')
     } finally {
       setCreateLoading(false)
     }
@@ -448,7 +470,7 @@ export default function KnowledgeBase() {
         destroyOnHidden
       >
         <Tabs
-          destroyInactiveTabPane
+          destroyOnHidden
           items={[
             {
               key: 'text',
@@ -489,7 +511,8 @@ export default function KnowledgeBase() {
                   <Alert
                     type="info"
                     showIcon
-                    message="仅支持 .txt / .md 文件（UTF-8 编码），大小不超过 5MB"
+                    message="支持 .txt / .md / .pdf / .docx，大小不超过 10MB"
+                    description="PDF 需含文本层（扫描件不支持 OCR）；DOCX 提取段落与表格文本。"
                     style={{ marginBottom: 16 }}
                   />
                   <Form.Item name="title" label="标题（可选，缺省自动识别）">
@@ -497,7 +520,7 @@ export default function KnowledgeBase() {
                   </Form.Item>
                   <Form.Item label="选择文件" required>
                     <Upload
-                      accept=".txt,.md"
+                      accept=".txt,.md,.pdf,.docx"
                       maxCount={1}
                       beforeUpload={(file) => {
                         setUploadFile(file)
@@ -505,7 +528,7 @@ export default function KnowledgeBase() {
                       }}
                       onRemove={() => setUploadFile(null)}
                     >
-                      <Button icon={<UploadOutlined />}>选择 .txt / .md 文件</Button>
+                      <Button icon={<UploadOutlined />}>选择文件</Button>
                     </Upload>
                   </Form.Item>
                   <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
@@ -513,6 +536,45 @@ export default function KnowledgeBase() {
                       <Button onClick={() => setCreateOpen(false)}>取消</Button>
                       <Button type="primary" htmlType="submit" loading={createLoading}>
                         上传并处理
+                      </Button>
+                    </Space>
+                  </Form.Item>
+                </Form>
+              ),
+            },
+            {
+              key: 'url',
+              label: '网页链接',
+              children: (
+                <Form<UrlForm> layout="vertical" form={urlForm} onFinish={onCreateUrl}>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="抓取网页正文（自动去除导航/广告/页脚）"
+                    description="需要公开可访问的 http/https 页面；需登录或纯动态渲染的页面可能提取失败。"
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Form.Item
+                    name="url"
+                    label="网页链接"
+                    rules={[
+                      { required: true, message: '请输入网页链接' },
+                      {
+                        pattern: /^https?:\/\/.+/i,
+                        message: 'URL 必须以 http:// 或 https:// 开头',
+                      },
+                    ]}
+                  >
+                    <Input placeholder="例如 https://example.com/article" maxLength={2000} />
+                  </Form.Item>
+                  <Form.Item name="title" label="标题（可选，缺省取网页标题）">
+                    <Input placeholder="请输入标题" maxLength={100} />
+                  </Form.Item>
+                  <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                    <Space>
+                      <Button onClick={() => setCreateOpen(false)}>取消</Button>
+                      <Button type="primary" htmlType="submit" loading={createLoading}>
+                        抓取并处理
                       </Button>
                     </Space>
                   </Form.Item>

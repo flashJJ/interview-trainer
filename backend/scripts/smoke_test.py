@@ -80,6 +80,23 @@ def main() -> None:
         resp = client.get("/knowledge/stats/overview", headers=headers)
         check("知识库统计", resp.json()["entry_count"] >= 1)
 
+        # ---------- 2.5 多格式导入 ----------
+        print("[2.5] 多格式导入")
+        resp = client.post(
+            "/knowledge/entries/upload",
+            files={"file": ("evil.exe", b"MZ binary", "application/octet-stream")},
+            headers=headers,
+        )
+        check("不支持的文件类型被拒绝", resp.status_code == 400 and "支持" in resp.json()["detail"])
+
+        resp = client.post("/knowledge/entries/url", json={"url": "ftp://invalid"}, headers=headers)
+        check("非法 URL 拒绝", resp.status_code == 400 and "http" in resp.json()["detail"])
+
+        resp = client.post(
+            "/knowledge/entries/url", json={"url": "http://127.0.0.1:9/none"}, headers=headers
+        )
+        check("不可达 URL 返回友好错误", resp.status_code == 400 and resp.json()["detail"])
+
         # ---------- 3. AI 出题 ----------
         print("[3] AI 出题")
         resp = client.post(

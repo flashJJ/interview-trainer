@@ -122,6 +122,17 @@ export const knowledgeApi = {
       throw new Error(errMsg(err, '创建条目失败'))
     }
   },
+  async createFromUrl(url: string, title?: string): Promise<KnowledgeEntry> {
+    try {
+      const { data } = await client.post<KnowledgeEntry>('/knowledge/entries/url', {
+        url,
+        title: title ?? '',
+      })
+      return data
+    } catch (err) {
+      throw new Error(errMsg(err, '链接录入失败'))
+    }
+  },
   async uploadEntry(file: File, title?: string): Promise<KnowledgeEntry> {
     try {
       const form = new FormData()

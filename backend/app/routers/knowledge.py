@@ -18,6 +18,7 @@ from ..schemas import (
     KnowledgeSearchIn,
     KnowledgeSearchOut,
     KnowledgeStatsOut,
+    KnowledgeUrlIn,
     SearchHit,
 )
 from ..services.pipeline import process_entry
@@ -25,14 +26,29 @@ from ..services.runtime import get_embeddings, get_vector_store
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
-_ALLOWED_EXTENSIONS = {".txt", ".md"}
-_MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+_ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 def _derive_title(content: str) -> str:
     first_line = (content or "").strip().splitlines()[0] if content.strip() else ""
     title = first_line.strip()[:30] if first_line else ""
     return title or "未命名知识库"
+
+
+def _extract_file_content(raw: bytes, ext: str) -> str:
+    """按扩展名提取文件文本内容。"""
+    if ext in (".txt", ".md"):
+        return raw.decode("utf-8", errors="replace").strip()
+    if ext == ".pdf":
+        from ..services.importers import extract_pdf_text
+
+        return extract_pdf_text(raw).strip()
+    if ext == ".docx":
+        from ..services.importers import extract_docx_text
+
+        return extract_docx_text(raw).strip()
+    raise ValueError(f"不支持的文件类型：{ext}")
 
 
 def _create_and_process(db: Session, user: User, title: str, content: str, source_type: str) -> KnowledgeEntry:
@@ -70,15 +86,37 @@ async def upload_entry(
 ):
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "仅支持 .txt / .md 文件")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "仅支持 .txt / .md / .pdf / .docx 文件"
+        )
     raw = await file.read()
     if len(raw) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "文件大小不能超过 5MB")
-    content = raw.decode("utf-8", errors="replace").strip()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "文件大小不能超过 10MB")
+    try:
+        content = _extract_file_content(raw, ext)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if len(content) < 30:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "文件内容太少（至少 30 字符）")
     file_title = title.strip() or os.path.splitext(file.filename or "未命名知识库")[0]
     return _create_and_process(db, current_user, file_title, content, "file")
+
+
+@router.post("/entries/url", response_model=KnowledgeEntryOut)
+def create_entry_from_url(
+    payload: KnowledgeUrlIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """从网页链接录入：抓取页面并提取正文。"""
+    from ..services.importers import fetch_url_text
+
+    try:
+        content = fetch_url_text(payload.url)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    title = payload.title.strip() or _derive_title(content)
+    return _create_and_process(db, current_user, title, content, "url")
 
 
 @router.get("/entries", response_model=KnowledgeListOut)
