@@ -142,7 +142,8 @@ export default function Review() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 210,
+      fixed: 'right' as const,
       render: (_: unknown, record: Question) => (
         <Space size={4}>
           <Button
@@ -221,6 +222,7 @@ export default function Review() {
           loading={loading}
           columns={columns}
           dataSource={items}
+          scroll={{ x: 1000 }}
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: (keys) => setSelectedIds(keys as number[]),
