@@ -326,25 +326,33 @@ def main() -> None:
         check("获取系统配置", resp.status_code == 200 and "llm_enabled" in resp.json(), resp.text[:100])
         check("API Key 脱敏返回", "****" in resp.json()["llm_api_key_masked"] or resp.json()["llm_api_key_set"] is False)
 
+        # 只读写非敏感字段（超时时间）验证配置持久化，测试后恢复原值。
+        # 不修改 base_url/key/model，也不调用 /settings/reset —— 这些会污染真实 LLM 配置且 Key 无法恢复明文。
+        base_cfg = client.get("/settings", headers=headers).json()
+        original_timeout = base_cfg["llm_timeout_seconds"]
         resp = client.put(
             "/settings",
-            json={"llm_base_url": "https://api.smoke-test.com", "llm_model": "smoke-model"},
+            json={"llm_timeout_seconds": 130},
             headers=headers,
         )
-        check("保存配置（即时生效）", resp.status_code == 200 and resp.json()["llm_base_url"] == "https://api.smoke-test.com", resp.text[:100])
+        check(
+            "保存配置（即时生效）",
+            resp.status_code == 200 and resp.json()["llm_timeout_seconds"] == 130,
+            resp.text[:100],
+        )
 
         resp = client.get("/settings", headers=headers)
-        check("配置已持久化", resp.json()["llm_model"] == "smoke-model")
+        check("配置已持久化", resp.json()["llm_timeout_seconds"] == 130)
+
+        # 恢复原超时配置
+        client.put("/settings", json={"llm_timeout_seconds": original_timeout}, headers=headers)
 
         resp = client.post("/settings/test", json={"target": "llm"}, headers=headers)
         check(
-            "测试连接（不可达地址应返回失败而非崩溃）",
-            resp.status_code == 200 and resp.json()["ok"] is False and resp.json()["error"],
+            "测试连接返回结构化结果（不会崩溃）",
+            resp.status_code == 200 and "ok" in resp.json() and "latency_ms" in resp.json(),
             resp.text[:120],
         )
-
-        resp = client.post("/settings/reset", headers=headers)
-        check("恢复默认配置", resp.status_code == 200 and resp.json()["llm_model"] != "smoke-model")
 
         resp = client.post(
             "/settings/password",
@@ -360,16 +368,32 @@ def main() -> None:
         check("创建讲题会话", resp.status_code == 201, resp.text[:100])
         chat_sid = resp.json()["id"]
 
+        # 按 LLM 配置状态分支断言：已配置 → 真实 SSE 流式回复；未配置 → 明确拒绝并引导
+        llm_on = client.get("/settings", headers=headers).json()["llm_enabled"]
         resp = client.post(
             f"/chat/sessions/{chat_sid}/messages",
             json={"content": "请讲解这道题"},
             headers=headers,
+            timeout=180,
         )
-        check(
-            "未配置 LLM 时发送明确拒绝并引导配置",
-            resp.status_code == 400 and "LLM" in resp.json()["detail"],
-            resp.text[:100],
-        )
+        if llm_on:
+            check(
+                "讲题 SSE 流式返回",
+                resp.status_code == 200
+                and "text/event-stream" in resp.headers.get("content-type", ""),
+                resp.text[:100],
+            )
+            check(
+                "SSE 事件包含正文增量与结束标记",
+                'data: {"type": "chunk"' in resp.text or '"type":"chunk"' in resp.text,
+                resp.text[:100],
+            )
+        else:
+            check(
+                "未配置 LLM 时发送明确拒绝并引导配置",
+                resp.status_code == 400 and "LLM" in resp.json()["detail"],
+                resp.text[:100],
+            )
 
         resp = client.get(f"/chat/sessions/{chat_sid}/messages", headers=headers)
         check("讲题历史消息", resp.status_code == 200 and isinstance(resp.json(), list))

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Button, Card, Form, Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { examApi } from '../api/client'
+import { useExamMutations, useExamPapers } from '@/hooks/useExams'
 import type { Difficulty, ExamPaper, PageResp, QType } from '../api/types'
 import {
   DIFFICULTIES,
@@ -25,40 +25,25 @@ interface GenForm {
 export default function Practice() {
   const { message } = AntdApp.useApp()
   const navigate = useNavigate()
-  const [rows, setRows] = useState<ExamPaper[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
-  const [loading, setLoading] = useState(false)
-  const [genLoading, setGenLoading] = useState(false)
 
   const [genForm] = Form.useForm<GenForm>()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data: PageResp<ExamPaper> = await examApi.list(page, size)
-      setRows(data.items)
-      setTotal(data.total)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '获取考卷列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [page, size])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  // 数据层：TanStack Query 统一管理
+  const { data: paperData, isLoading: loading } = useExamPapers(page, size)
+  const { generate } = useExamMutations()
+  const rows = paperData?.items ?? []
+  const total = paperData?.total ?? 0
+  const genLoading = generate.isPending
 
   const onGenerate = async (values: GenForm) => {
     if (values.types.length === 0) {
       message.warning('请至少选择一种题型')
       return
     }
-    setGenLoading(true)
     try {
-      const paper = await examApi.generate({
+      const paper = await generate.mutateAsync({
         title: values.title?.trim() || undefined,
         count: values.count,
         types: values.types,
@@ -68,8 +53,6 @@ export default function Practice() {
       navigate(`/exam/${paper.id}`)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成考卷失败')
-    } finally {
-      setGenLoading(false)
     }
   }
 

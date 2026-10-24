@@ -22,8 +22,8 @@ import {
   SaveOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
-import { settingsApi } from '../api/client'
-import type { SystemConfig, TestConnectionResult } from '../api/types'
+import { useSettingsConfig, useSettingsMutations } from '@/hooks/useSettings'
+import type { TestConnectionResult } from '../api/types'
 
 interface LLMFormValues {
   llm_base_url: string
@@ -43,41 +43,30 @@ interface PasswordFormValues {
 
 export default function Settings() {
   const { message } = AntdApp.useApp()
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [config, setConfig] = useState<SystemConfig | null>(null)
   const [testing, setTesting] = useState<'llm' | 'embedding' | null>(null)
   const [form] = Form.useForm<LLMFormValues>()
   const [pwdForm] = Form.useForm<PasswordFormValues>()
 
-  const loadConfig = async () => {
-    setLoading(true)
-    try {
-      const data = await settingsApi.get()
-      setConfig(data)
-      form.setFieldsValue({
-        llm_base_url: data.llm_base_url,
-        llm_api_key: '', // 已配置时留空 = 不修改
-        llm_model: data.llm_model,
-        llm_timeout_seconds: data.llm_timeout_seconds,
-        embedding_base_url: data.embedding_base_url,
-        embedding_api_key: '',
-        embedding_model: data.embedding_model,
-      })
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '加载配置失败')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // 数据层：TanStack Query 管理配置读取与写操作
+  const { data: config, isLoading: loading } = useSettingsConfig()
+  const { save, reset, test, changePassword } = useSettingsMutations()
+  const saving = save.isPending
 
+  // 配置加载/更新后同步到表单（API Key 留空 = 不修改）
   useEffect(() => {
-    void loadConfig()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!config) return
+    form.setFieldsValue({
+      llm_base_url: config.llm_base_url,
+      llm_api_key: '',
+      llm_model: config.llm_model,
+      llm_timeout_seconds: config.llm_timeout_seconds,
+      embedding_base_url: config.embedding_base_url,
+      embedding_api_key: '',
+      embedding_model: config.embedding_model,
+    })
+  }, [config, form])
 
   const onSave = async (values: LLMFormValues) => {
-    setSaving(true)
     try {
       // API Key 留空表示不修改；空 Base URL 表示清空该项
       const payload = {
@@ -89,15 +78,12 @@ export default function Settings() {
         embedding_api_key: values.embedding_api_key?.trim() || null,
         embedding_model: values.embedding_model?.trim() ?? '',
       }
-      const data = await settingsApi.save(payload)
-      setConfig(data)
+      const data = await save.mutateAsync(payload)
       message.success(
         data.llm_enabled ? '配置已保存并生效：AI 模式已启用' : '配置已保存并生效：当前为演示模式',
       )
     } catch (err) {
       message.error(err instanceof Error ? err.message : '保存失败')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -119,7 +105,7 @@ export default function Settings() {
               embedding_api_key: values.embedding_api_key?.trim() || undefined,
               embedding_model: values.embedding_model?.trim(),
             }
-      const result: TestConnectionResult = await settingsApi.test(payload)
+      const result: TestConnectionResult = await test.mutateAsync(payload)
       if (result.ok) {
         message.success(`${result.detail}（耗时 ${result.latency_ms}ms）`)
       } else {
@@ -134,17 +120,7 @@ export default function Settings() {
 
   const onReset = async () => {
     try {
-      const data = await settingsApi.reset()
-      setConfig(data)
-      form.setFieldsValue({
-        llm_base_url: data.llm_base_url,
-        llm_api_key: '',
-        llm_model: data.llm_model,
-        llm_timeout_seconds: data.llm_timeout_seconds,
-        embedding_base_url: data.embedding_base_url,
-        embedding_api_key: '',
-        embedding_model: data.embedding_model,
-      })
+      await reset.mutateAsync()
       message.success('已恢复为 .env 默认配置')
     } catch (err) {
       message.error(err instanceof Error ? err.message : '恢复默认失败')
@@ -153,7 +129,10 @@ export default function Settings() {
 
   const onChangePassword = async (values: PasswordFormValues) => {
     try {
-      const result = await settingsApi.changePassword(values.old_password, values.new_password)
+      const result = await changePassword.mutateAsync({
+        oldPassword: values.old_password,
+        newPassword: values.new_password,
+      })
       message.success(result.message)
       pwdForm.resetFields()
     } catch (err) {

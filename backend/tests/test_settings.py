@@ -1,5 +1,15 @@
-"""系统配置模块单测：DB 覆盖、优先级合并、脱敏。"""
+"""系统配置模块单测：DB 覆盖、优先级合并、脱敏。
 
+重要：配置类单测必须使用**独立内存数据库**，否则 clear_overrides() 会清空
+真实运行的 system_configs 表（清掉用户的 LLM Key，且 API 无法恢复明文）。
+"""
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app import database as app_database
+from app import models
 from app.config import EffectiveSettings, effective_settings, get_settings
 from app.services.settings_store import (
     clear_overrides,
@@ -7,6 +17,16 @@ from app.services.settings_store import (
     mask_secret,
     save_overrides,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_db(monkeypatch):
+    """把 settings_store 使用的 SessionLocal 替换为内存库，隔离真实配置。"""
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    models.Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine)
+    monkeypatch.setattr(app_database, "SessionLocal", TestSession)
+    yield
 
 
 class TestMaskSecret:

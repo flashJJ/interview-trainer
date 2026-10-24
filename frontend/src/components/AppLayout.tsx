@@ -13,9 +13,8 @@ import {
   LogoutOutlined,
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
-import { useEffect, useState } from 'react'
 import { useAuth } from '../store/auth'
-import { questionApi } from '../api/client'
+import { useQuestionStats } from '@/hooks/useQuestions'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -24,23 +23,9 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
-  const [pendingCount, setPendingCount] = useState(0)
-
-  // 待审核题目数（菜单徽标 + 30s 轮询）
-  useEffect(() => {
-    let timer: number | undefined
-    const fetchPending = () => {
-      questionApi
-        .statsOverview()
-        .then((s) => setPendingCount(s.pending_count ?? 0))
-        .catch(() => {})
-    }
-    fetchPending()
-    timer = window.setInterval(fetchPending, 30000)
-    return () => {
-      if (timer) window.clearInterval(timer)
-    }
-  }, [])
+  // 待审核题目数（菜单徽标，30s 自动刷新）——数据层交给 TanStack Query
+  const { data: questionStats } = useQuestionStats(30_000)
+  const pendingCount = questionStats?.pending_count ?? 0
 
   const reviewLabel =
     pendingCount > 0 ? (
