@@ -17,6 +17,7 @@ import {
   Q_TYPE_TEXT,
   truncate,
 } from '../utils/constants'
+import { stickyTableConfig } from '../utils/stickyTable'
 
 interface FilterForm {
   q_type?: QType
@@ -235,6 +236,7 @@ export default function QuestionBank() {
           dataSource={rows}
           loading={loading}
           scroll={{ x: 1100 }}
+          sticky={stickyTableConfig}
           pagination={{
             current: page,
             pageSize: size,

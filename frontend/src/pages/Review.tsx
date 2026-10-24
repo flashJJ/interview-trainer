@@ -19,6 +19,7 @@ import { AuditOutlined, CheckOutlined, CloseOutlined, EditOutlined } from '@ant-
 import { useQuestionMutations, useQuestions } from '@/hooks/useQuestions'
 import type { Difficulty, QType, Question } from '../api/types'
 import { DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/constants'
+import { stickyTableConfig } from '../utils/stickyTable'
 
 interface EditFormValues {
   content: string
@@ -224,6 +225,7 @@ export default function Review() {
           columns={columns}
           dataSource={items}
           scroll={{ x: 1000 }}
+          sticky={stickyTableConfig}
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: (keys) => setSelectedIds(keys as number[]),
