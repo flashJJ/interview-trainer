@@ -26,6 +26,22 @@ _ensure_sqlite_dir(settings.database_url)
 _connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
 engine = create_engine(settings.database_url, connect_args=_connect_args, pool_pre_ping=True)
 
+if settings.database_url.startswith("sqlite"):
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _connection_record):  # noqa: ANN001
+        """SQLite 并发优化：WAL 允许读写并发，busy_timeout 缓解写锁竞争。
+
+        背景：并发出题（LLM 多线程）与考试草稿自动保存同时写库时，
+        默认 journal 模式会报 database is locked（500）。
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.close()
+
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

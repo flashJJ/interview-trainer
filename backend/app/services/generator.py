@@ -91,30 +91,47 @@ class QuestionGenerator:
             return GenerationOutcome([], 0, self.mode, "可用素材不足：知识块内容太短，无法出题")
 
         corpus_terms = text_utils.top_terms([c.content for c in usable], top_k=40)
+
+        # 规划任务：每题型从素材池随机取 count_per_type 个块（互不重复，复用同一块时轮转）
+        jobs: list[tuple[ChunkLike, str]] = []
+        for q_type in types:
+            pool_list = list(usable)
+            random.shuffle(pool_list)
+            for idx in range(count_per_type):
+                jobs.append((pool_list[idx % len(pool_list)], q_type))
+
+        # LLM 出题是网络 IO，按任务并发执行（规则引擎模式同样受益）
+        results: list[DraftQuestion] = []
+        if jobs:
+            from concurrent.futures import ThreadPoolExecutor
+
+            max_workers = min(len(jobs), 8)
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = [
+                    pool.submit(self._generate_one, chunk, q_type, difficulty, corpus_terms)
+                    for chunk, q_type in jobs
+                ]
+                for future in futures:
+                    try:
+                        draft = future.result()
+                    except Exception:  # noqa: BLE001 - 单任务失败不影响整体
+                        draft = None
+                    if draft is not None:
+                        results.append(draft)
+
+        # 主线程串行去重（Chroma 查询不做并发），并按题型配额收敛
         drafts: list[DraftQuestion] = []
         skipped = 0
         for q_type in types:
-            produced = 0
-            attempts = 0
-            max_attempts = count_per_type * 5 + 5
-            pool = list(usable)
-            random.shuffle(pool)
-            idx = 0
-            while produced < count_per_type and attempts < max_attempts:
-                if idx >= len(pool):
-                    random.shuffle(pool)
-                    idx = 0
-                chunk = pool[idx]
-                idx += 1
-                attempts += 1
-                draft = self._generate_one(chunk, q_type, difficulty, corpus_terms)
-                if draft is None:
-                    continue
+            picked = 0
+            for draft in [r for r in results if r.q_type == q_type]:
+                if picked >= count_per_type:
+                    break
                 if self._is_duplicate(draft, user_id):
                     skipped += 1
                     continue
                 drafts.append(draft)
-                produced += 1
+                picked += 1
 
         mode_desc = "AI 生成" if self.mode == "llm" else "规则引擎生成"
         parts = [f"{TYPE_NAME[t]}×{sum(1 for d in drafts if d.q_type == t)}" for t in types]
@@ -182,7 +199,7 @@ class QuestionGenerator:
             {"role": "user", "content": self._build_prompt(chunk.content, q_type, difficulty)},
         ]
         raw = ""
-        for attempt in range(3):
+        for attempt in range(2):  # 失败最多重试一次（推理模型单次耗时长，控制总时长）
             try:
                 raw = self.llm.chat(messages, temperature=0.4)
                 data = extract_json(raw)

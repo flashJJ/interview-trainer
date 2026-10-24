@@ -85,7 +85,7 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await genModal.waitFor({ timeout: 5000 });
     await genModal.getByRole('spinbutton').fill('2');
     await genModal.getByRole('button', { name: /开\s*始\s*生\s*成/ }).click();
-    await page.getByText(/已生成/).first().waitFor({ timeout: 30000 });
+    await page.getByText(/已生成/).first().waitFor({ timeout: 180000 }); // 真实 LLM 出题 6 题需要较长时间
     await page.waitForTimeout(500);
     // 2. 进入题目审核页，待审列表应有题
     await menuClick(/题\s*目\s*审\s*核/);
@@ -196,18 +196,39 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   });
   await page.screenshot({ path: `${OUT}/08-result.png`, fullPage: true });
 
-  await step('AI 讲题入口（未配置 Key 时禁用并引导配置）', async () => {
+  await step('AI 讲题（已配置 LLM：打开抽屉、发送消息、流式回复）', async () => {
     // 当前在考试结果页：点第一题「问 AI」
     await page.getByRole('button', { name: /问\s*AI/ }).first().click();
     const drawer = page.getByRole('dialog');
-    await drawer.waitFor({ timeout: 5000 });
-    await page.getByText('AI 讲题需要配置 LLM').first().waitFor({ timeout: 10000 });
+    await drawer.waitFor({ timeout: 10000 });
     const tutorInput = drawer.locator('input').first();
-    if (!(await tutorInput.isDisabled())) {
-      throw new Error('未配置 LLM 时讲题输入框应禁用');
+    await tutorInput.waitFor({ timeout: 10000 });
+    // 抽屉打开时会异步拉取 LLM 状态与会话，输入框在初始化完成前是禁用态——轮询等待可用
+    let enabled = false;
+    for (let i = 0; i < 30; i++) {
+      if (!(await tutorInput.isDisabled())) {
+        enabled = true;
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
+    if (!enabled) {
+      throw new Error('讲题输入框一直禁用（LLM 状态或会话初始化失败）');
+    }
+    // 真实发送一条消息，验证 SSE 流式回复
+    await tutorInput.fill('这道题为什么是这个答案？请简要讲解');
+    await drawer.getByRole('button', { name: /发\s*送/ }).click();
+    // 等待助手回复出现（推理模型可能较慢，给 120s）
+    await drawer.locator('span:has-text("AI 老师")').first().waitFor({ timeout: 120000 });
+    await page.waitForTimeout(3000);
+    const drawerText = await drawer.innerText();
+    if (drawerText.length < 200) {
+      throw new Error(`讲题回复内容过短：${drawerText.slice(0, 100)}`);
     }
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
+    // 抽屉关闭动画 + 遮罩移除需要一点时间；直接导航回知识库页，避免遮罩残影影响后续菜单点击
+    await page.goto('http://localhost:5173/knowledge', { waitUntil: 'networkidle' });
+    await page.getByRole('menuitem', { name: /知\s*识\s*库/ }).waitFor({ timeout: 10000 });
   });
 
   await step('系统配置页渲染（模式展示 + LLM/Embedding 表单）', async () => {
