@@ -220,7 +220,11 @@ export default function WrongQuestions() {
       <Card style={{ marginBottom: 16 }}>
         <Space size={48} wrap style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space size={48} wrap>
-            <Statistic title="错题总数" value={stats?.total ?? 0} />
+            <Statistic
+              title="错题总数"
+              value={stats?.total ?? 0}
+              valueStyle={{ color: '#cf1322' }}
+            />
             <Statistic
               title="今日待复习"
               value={stats?.due_today ?? 0}
