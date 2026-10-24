@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -14,64 +14,44 @@ import {
 } from 'antd'
 import { CarryOutOutlined, ReloadOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import AITutorDrawer from '../components/AITutorDrawer'
-import { wrongQuestionsApi } from '../api/client'
-import type { Difficulty, QType, WrongQuestionItem } from '../api/types'
-import { DIFFICULTY_COLOR, DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '../utils/constants'
+import { useWrongMutations, useWrongQuestions, useWrongStats } from '@/hooks/useWrongQuestions'
+import type { Difficulty, QType, WrongQuestionItem } from '@/api/types'
+import { DIFFICULTY_COLOR, DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '@/utils/constants'
 
 export default function WrongQuestions() {
+  const { message } = AntdApp.useApp()
+  const navigate = useNavigate()
+
   const [tutorOpen, setTutorOpen] = useState(false)
   const [tutorQuestionId, setTutorQuestionId] = useState<number | null>(null)
   const [tutorTitle, setTutorTitle] = useState('')
 
-  const { message } = AntdApp.useApp()
-  const navigate = useNavigate()
-
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<{
-    total: number
-    due_today: number
-    overdue: number
-    due_next_7_days: number
-  } | null>(null)
-  const [items, setItems] = useState<WrongQuestionItem[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(10)
   const [qType, setQType] = useState<QType | ''>('')
   const [onlyDue, setOnlyDue] = useState(false)
-  const [generating, setGenerating] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [statsResp, listResp] = await Promise.all([
-        wrongQuestionsApi.stats(),
-        wrongQuestionsApi.list({ page, size, q_type: qType, only_due: onlyDue }),
-      ])
-      setStats(statsResp)
-      setItems(listResp.items)
-      setTotal(listResp.total)
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [page, size, qType, onlyDue, message])
+  // 数据层全部交给 TanStack Query：缓存、loading、失效自动刷新
+  const { data: stats, isLoading: statsLoading } = useWrongStats()
+  const { data: listData, isLoading: listLoading, refetch } = useWrongQuestions({
+    page,
+    size,
+    q_type: qType,
+    only_due: onlyDue,
+  })
+  const { generateReview, master, remove } = useWrongMutations()
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  const loading = statsLoading || listLoading
+  const items = listData?.items ?? []
+  const total = listData?.total ?? 0
 
   const onStartReview = async () => {
-    setGenerating(true)
     try {
-      const paper = await wrongQuestionsApi.generateReview(10)
+      const paper = await generateReview.mutateAsync(10)
       message.success(`复习卷已生成，共 ${paper.question_count} 题`)
       navigate(`/exam/${paper.id}`)
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成复习卷失败')
-    } finally {
-      setGenerating(false)
     }
   }
 
@@ -145,7 +125,7 @@ export default function WrongQuestions() {
     {
       title: '操作',
       key: 'action',
-      width: 160,
+      width: 200,
       render: (_: unknown, item: WrongQuestionItem) => (
         <Space size={4}>
           <Button
@@ -164,9 +144,8 @@ export default function WrongQuestions() {
             title="标记掌握"
             description="将该题移出错题本，确定吗？"
             onConfirm={async () => {
-              await wrongQuestionsApi.master(item.id)
+              await master.mutateAsync(item.id)
               message.success('已标记掌握')
-              void load()
             }}
             okText="确定"
             cancelText="取消"
@@ -179,9 +158,8 @@ export default function WrongQuestions() {
             title="移出错题本"
             description="移出后将不再安排该题复习，确定吗？"
             onConfirm={async () => {
-              await wrongQuestionsApi.remove(item.id)
+              await remove.mutateAsync(item.id)
               message.success('已移出')
-              void load()
             }}
             okText="确定"
             cancelText="取消"
@@ -238,14 +216,14 @@ export default function WrongQuestions() {
             <Statistic title="未来 7 天" value={stats?.due_next_7_days ?? 0} />
           </Space>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={() => void load()}>
+            <Button icon={<ReloadOutlined />} onClick={() => void refetch()}>
               刷新
             </Button>
             <Button
               type="primary"
               size="large"
               icon={<ThunderboltOutlined />}
-              loading={generating}
+              loading={generateReview.isPending}
               disabled={dueCount === 0}
               onClick={() => void onStartReview()}
             >
