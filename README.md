@@ -82,8 +82,19 @@ npm run dev        # 默认 5173 端口，/api 已代理到 8000
 
 也可以直接编辑配置文件（与配置页二选一，配置页优先）：复制 `backend/.env.example` 为 `backend/.env`，填入任意 **OpenAI 兼容协议**服务：
 
+| 服务商 | Base URL | 模型 |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| **火山方舟 Agent Plan 套餐** | `https://ark.cn-beijing.volces.com/api/plan/v3` | `ark-code-latest` |
+
+> ⚠️ **火山方舟套餐注意**：Agent Plan / Coding Plan 的专属 Key 必须配套餐端点（`/api/plan/v3`），
+> 错用标准端点 `/api/v3` 会认证失败且可能产生额外费用。标准方舟 API Key 才用 `/api/v3`。
+
 ```ini
-# DeepSeek 示例
+# 配置示例（DeepSeek + Embedding）
 LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=sk-xxxxxxxx
 LLM_MODEL=deepseek-chat
