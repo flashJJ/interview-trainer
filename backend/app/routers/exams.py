@@ -87,6 +87,7 @@ def generate_exam(
     query = db.query(Question).filter(
         Question.user_id == current_user.id,
         Question.status == "active",
+        Question.review_status == "approved",  # 组卷只从已审核题目抽取
         Question.q_type.in_(payload.types),
     )
     if payload.difficulty:

@@ -210,7 +210,8 @@ def seed() -> None:
             if outcome.drafts:
                 all_questions.extend(
                     persist_drafts(
-                        db, user.id, outcome.drafts, get_embeddings(), get_vector_store()
+                        db, user.id, outcome.drafts, get_embeddings(), get_vector_store(),
+                        review_status="approved",  # 种子题目直接通过审核
                     )
                 )
                 refresh_entry_question_counts(db, [entry.id])

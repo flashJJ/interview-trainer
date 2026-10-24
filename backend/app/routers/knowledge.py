@@ -102,10 +102,14 @@ def list_entries(
         .limit(size)
         .all()
     )
-    # 题目计数实时校准，保证列表准确
+    # 题目计数实时校准（只统计已审核进入组卷池的题目）
     counts = dict(
         db.query(Question.entry_id, func.count(Question.id))
-        .filter(Question.user_id == current_user.id, Question.status == "active")
+        .filter(
+            Question.user_id == current_user.id,
+            Question.status == "active",
+            Question.review_status == "approved",
+        )
         .group_by(Question.entry_id)
         .all()
     )

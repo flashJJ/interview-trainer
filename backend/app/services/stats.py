@@ -8,13 +8,27 @@ from ..models import ExamAnswer, ExamSession, KnowledgeEntry, Question
 
 
 def _questions_base(db, user_id: int):
-    return db.query(Question).filter(Question.user_id == user_id, Question.status == "active")
+    """题目统计口径：已审核（进入组卷池）的题目。"""
+    return db.query(Question).filter(
+        Question.user_id == user_id,
+        Question.status == "active",
+        Question.review_status == "approved",
+    )
 
 
 def questions_overview(db, user_id: int) -> dict:
     base = _questions_base(db, user_id)
     total = base.count()
     llm_count = base.filter(Question.source == "llm").count()
+    pending_count = (
+        db.query(Question)
+        .filter(
+            Question.user_id == user_id,
+            Question.status == "active",
+            Question.review_status == "pending",
+        )
+        .count()
+    )
 
     type_rows = (
         base.with_entities(Question.q_type, func.count(Question.id))
@@ -55,6 +69,7 @@ def questions_overview(db, user_id: int) -> dict:
         "total": total,
         "llm_count": llm_count,
         "rule_count": total - llm_count,
+        "pending_count": pending_count,
         "answered_count": answered_count,
         "by_type": [{"key": k, "count": v} for k, v in type_map.items()],
         "by_difficulty": [{"key": k, "count": v} for k, v in difficulty_map.items()],

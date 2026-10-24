@@ -62,6 +62,41 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   });
   await page.screenshot({ path: `${OUT}/03-questions.png` });
 
+  await step('出题审核流（知识库出题 -> 待审核 -> 通过入池）', async () => {
+    // 1. 知识库页对第一条资料 AI 出题（默认全题型，每题型 2 道）
+    await menuClick(/知\s*识\s*库/);
+    await page.getByText('Redis 核心知识笔记').first().waitFor({ timeout: 10000 });
+    const firstRow = page.locator('.ant-table-tbody tr:has(td)').first();
+    await firstRow.getByRole('button', { name: /AI\s*出\s*题/ }).click();
+    const genModal = page.getByRole('dialog');
+    await genModal.waitFor({ timeout: 5000 });
+    await genModal.getByRole('spinbutton').fill('2');
+    await genModal.getByRole('button', { name: /开\s*始\s*生\s*成/ }).click();
+    await page.getByText(/已生成/).first().waitFor({ timeout: 30000 });
+    await page.waitForTimeout(500);
+    // 2. 进入题目审核页，待审列表应有题
+    await menuClick(/题\s*目\s*审\s*核/);
+    await page.getByText('待审核题目').first().waitFor({ timeout: 10000 });
+    await page.locator('.ant-table-tbody tr:has(td)').first().waitFor({ timeout: 10000 });
+    // 待审总数（统计卡口径，避免分页补位导致行数不变）
+    const pendingStat = page
+      .locator('.ant-statistic')
+      .filter({ hasText: '待审核题目' })
+      .locator('.ant-statistic-content-value');
+    const pendingBefore = Number((await pendingStat.textContent()) ?? '0');
+    if (pendingBefore === 0) throw new Error('待审核列表为空，出题未进入审核队列');
+    // 3. 通过第一题，待审总数减少（图标 aria-label 会混入可访问名，故在行内用子串匹配）
+    const firstPendingRow = page.locator('.ant-table-tbody tr:has(td)').first();
+    await firstPendingRow.getByRole('button', { name: /通\s*过/ }).first().click();
+    await page.waitForTimeout(2000);
+    const pendingAfter = Number((await pendingStat.textContent()) ?? '0');
+    if (pendingAfter >= pendingBefore) {
+      throw new Error(`审核通过后待审数未减少（${pendingBefore} -> ${pendingAfter}）`);
+    }
+    await page.waitForTimeout(1000);
+  });
+  await page.screenshot({ path: `${OUT}/11-review.png`, fullPage: true });
+
   await step('做题训练页渲染', async () => {
     await menuClick(/做\s*题\s*训\s*练/);
     await page.getByText('生成随机考卷').waitFor({ timeout: 10000 });

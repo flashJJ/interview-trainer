@@ -95,6 +95,7 @@ class Question(Base):
     difficulty = Column(String(20), default="medium", index=True)  # easy|medium|hard
     keywords_json = Column("keywords", Text, default="[]")
     source = Column(String(20), default="rule")  # llm | rule
+    review_status = Column(String(20), default="pending", index=True)  # pending | approved | rejected
     vector_id = Column(String(64), default="")
     status = Column(String(20), default="active")  # active | archived
     created_at = Column(DateTime, default=datetime.utcnow)

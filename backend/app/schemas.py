@@ -117,7 +117,27 @@ class QuestionOut(BaseModel):
     entry_id: Optional[int] = None
     entry_title: Optional[str] = None
     source: str
+    review_status: str = "approved"
     created_at: datetime
+
+
+class QuestionUpdateIn(BaseModel):
+    """编辑题目（审核页「编辑后通过」用）。"""
+
+    content: Optional[str] = None
+    options: Optional[List[str]] = None
+    answer: Optional[str] = None
+    explanation: Optional[str] = None
+    difficulty: Optional[str] = None
+
+
+class ReviewActionIn(BaseModel):
+    action: str = "approve"  # approve | reject
+
+
+class BatchReviewIn(BaseModel):
+    question_ids: List[int]
+    action: str = "approve"  # approve | reject
 
 
 class QuestionListOut(BaseModel):
@@ -144,6 +164,9 @@ class GenerateQuestionsOut(BaseModel):
 
 class QuestionStatsOut(BaseModel):
     total: int
+    approved_count: int
+    pending_count: int
+    rejected_count: int
     llm_count: int
     rule_count: int
     by_type: dict
@@ -275,6 +298,7 @@ class QuestionsOverviewOut(BaseModel):
     total: int
     llm_count: int
     rule_count: int
+    pending_count: int
     answered_count: int
     by_type: List[KVItem]
     by_difficulty: List[KVItem]

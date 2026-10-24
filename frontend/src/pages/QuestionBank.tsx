@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
+import { Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -23,6 +23,8 @@ interface FilterForm {
   keyword?: string
 }
 
+type ReviewTab = 'approved' | 'pending' | 'rejected'
+
 export default function QuestionBank() {
   const { message } = AntdApp.useApp()
   const [rows, setRows] = useState<Question[]>([])
@@ -31,6 +33,7 @@ export default function QuestionBank() {
   const [size, setSize] = useState(10)
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<FilterForm>({})
+  const [reviewTab, setReviewTab] = useState<ReviewTab>('approved')
 
   const [detail, setDetail] = useState<Question | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -46,6 +49,7 @@ export default function QuestionBank() {
         q_type: filters.q_type,
         difficulty: filters.difficulty,
         keyword: filters.keyword?.trim() || undefined,
+        review_status: reviewTab,
       })
       setRows(data.items)
       setTotal(data.total)
@@ -54,7 +58,7 @@ export default function QuestionBank() {
     } finally {
       setLoading(false)
     }
-  }, [page, size, filters])
+  }, [page, size, filters, reviewTab])
 
   useEffect(() => {
     void load()
@@ -130,6 +134,21 @@ export default function QuestionBank() {
       ),
     },
     {
+      title: '状态',
+      dataIndex: 'review_status',
+      key: 'review_status',
+      width: 90,
+      render: (s: Question['review_status']) => {
+        const map = {
+          approved: { color: 'green', text: '已通过' },
+          pending: { color: 'orange', text: '待审核' },
+          rejected: { color: 'red', text: '已拒绝' },
+        } as const
+        const item = map[s] ?? map.approved
+        return <Tag color={item.color}>{item.text}</Tag>
+      },
+    },
+    {
       title: '所属资料',
       dataIndex: 'entry_title',
       key: 'entry_title',
@@ -173,6 +192,19 @@ export default function QuestionBank() {
 
   return (
     <div>
+      <Tabs
+        activeKey={reviewTab}
+        onChange={(key) => {
+          setReviewTab(key as ReviewTab)
+          setPage(1)
+        }}
+        style={{ marginBottom: 16 }}
+        items={[
+          { key: 'approved', label: '已通过' },
+          { key: 'pending', label: '待审核' },
+          { key: 'rejected', label: '已拒绝' },
+        ]}
+      />
       <Card size="small" style={{ marginBottom: 16 }}>
         <Form form={form} layout="inline" onFinish={onSearch} initialValues={{}}>
           <Form.Item name="q_type" label="题型">

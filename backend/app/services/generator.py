@@ -380,8 +380,11 @@ class QuestionGenerator:
         return self.store.max_question_similarity(embedding, user_id) >= self.settings.question_dedup_threshold
 
 
-def persist_drafts(db, user_id: int, drafts: list[DraftQuestion], embeddings, store) -> list:
-    """把草稿题目写入关系库并同步向量库。返回 Question ORM 对象列表。"""
+def persist_drafts(db, user_id: int, drafts: list[DraftQuestion], embeddings, store, review_status: str = "pending") -> list:
+    """把草稿题目写入关系库并同步向量库。返回 Question ORM 对象列表。
+
+    review_status: 新生成题目默认进入待审核（pending）；种子数据等可信来源可传 approved。
+    """
     from ..models import Question
 
     questions: list[Question] = []
@@ -398,6 +401,7 @@ def persist_drafts(db, user_id: int, drafts: list[DraftQuestion], embeddings, st
             difficulty=draft.difficulty,
             keywords_json=json.dumps(draft.keywords, ensure_ascii=False),
             source=draft.source,
+            review_status=review_status,
         )
         db.add(question)
         db.flush()
@@ -418,13 +422,17 @@ def persist_drafts(db, user_id: int, drafts: list[DraftQuestion], embeddings, st
 
 
 def refresh_entry_question_counts(db, entry_ids) -> None:
-    """维护知识条目的题目计数字段。"""
+    """维护知识条目的题目计数字段（只统计已进入组卷池的 approved 题）。"""
     from ..models import KnowledgeEntry, Question
 
     for entry_id in {e for e in entry_ids if e}:
         count = (
             db.query(Question)
-            .filter(Question.entry_id == entry_id, Question.status == "active")
+            .filter(
+                Question.entry_id == entry_id,
+                Question.status == "active",
+                Question.review_status == "approved",
+            )
             .count()
         )
         db.query(KnowledgeEntry).filter(KnowledgeEntry.id == entry_id).update(

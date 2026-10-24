@@ -96,6 +96,7 @@ export interface Question {
   entry_id: number | null
   entry_title: string | null
   source: QuestionSource
+  review_status: 'pending' | 'approved' | 'rejected'
   created_at: string
 }
 
@@ -116,6 +117,9 @@ export interface GenerateQuestionsResp {
 
 export interface QuestionStatsOverview {
   total: number
+  approved_count: number
+  pending_count: number
+  rejected_count: number
   llm_count: number
   rule_count: number
   by_type: Record<string, number>

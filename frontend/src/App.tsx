@@ -3,6 +3,7 @@ import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import KnowledgeBase from './pages/KnowledgeBase'
 import QuestionBank from './pages/QuestionBank'
+import Review from './pages/Review'
 import Practice from './pages/Practice'
 import WrongQuestions from './pages/WrongQuestions'
 import ExamSession from './pages/ExamSession'
@@ -25,6 +26,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/questions" element={<QuestionBank />} />
+        <Route path="/review" element={<Review />} />
         <Route path="/practice" element={<Practice />} />
         <Route path="/wrong-questions" element={<WrongQuestions />} />
         <Route path="/exam/:paperId" element={<ExamSession />} />

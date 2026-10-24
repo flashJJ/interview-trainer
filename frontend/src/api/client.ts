@@ -184,6 +184,7 @@ export const questionApi = {
     difficulty?: Difficulty | ''
     entry_id?: number
     keyword?: string
+    review_status?: 'approved' | 'pending' | 'rejected' | 'all'
   }): Promise<PageResp<Question>> {
     try {
       const { data } = await client.get<PageResp<Question>>('/questions', { params })
@@ -205,6 +206,45 @@ export const questionApi = {
       await client.delete(`/questions/${id}`)
     } catch (err) {
       throw new Error(errMsg(err, '删除题目失败'))
+    }
+  },
+  async update(
+    id: number,
+    payload: {
+      content?: string
+      options?: string[]
+      answer?: string
+      explanation?: string
+      difficulty?: Difficulty
+    },
+  ): Promise<Question> {
+    try {
+      const { data } = await client.put<Question>(`/questions/${id}`, payload)
+      return data
+    } catch (err) {
+      throw new Error(errMsg(err, '保存题目失败'))
+    }
+  },
+  async review(id: number, action: 'approve' | 'reject'): Promise<Question> {
+    try {
+      const { data } = await client.post<Question>(`/questions/${id}/review`, { action })
+      return data
+    } catch (err) {
+      throw new Error(errMsg(err, '审核操作失败'))
+    }
+  },
+  async batchReview(
+    questionIds: number[],
+    action: 'approve' | 'reject',
+  ): Promise<{ ok: boolean; updated: number; message: string }> {
+    try {
+      const { data } = await client.post<{ ok: boolean; updated: number; message: string }>(
+        '/questions/review/batch',
+        { question_ids: questionIds, action },
+      )
+      return data
+    } catch (err) {
+      throw new Error(errMsg(err, '批量审核失败'))
     }
   },
   async generate(req: GenerateQuestionsReq): Promise<GenerateQuestionsResp> {

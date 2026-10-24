@@ -1,10 +1,11 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd'
+import { Badge, Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd'
 import {
   BookOutlined,
   QuestionCircleOutlined,
   EditOutlined,
   CarryOutOutlined,
+  AuditOutlined,
   BarChartOutlined,
   LineChartOutlined,
   SettingOutlined,
@@ -12,25 +13,54 @@ import {
   LogoutOutlined,
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../store/auth'
+import { questionApi } from '../api/client'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
-
-const menuItems: MenuProps['items'] = [
-  { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
-  { key: '/questions', icon: <QuestionCircleOutlined />, label: '题库' },
-  { key: '/practice', icon: <EditOutlined />, label: '做题训练' },
-  { key: '/wrong-questions', icon: <CarryOutOutlined />, label: '错题本' },
-  { key: '/analytics/questions', icon: <BarChartOutlined />, label: '题目分析' },
-  { key: '/analytics/practice', icon: <LineChartOutlined />, label: '做题分析' },
-  { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
-]
 
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
+  const [pendingCount, setPendingCount] = useState(0)
+
+  // 待审核题目数（菜单徽标 + 30s 轮询）
+  useEffect(() => {
+    let timer: number | undefined
+    const fetchPending = () => {
+      questionApi
+        .statsOverview()
+        .then((s) => setPendingCount(s.pending_count ?? 0))
+        .catch(() => {})
+    }
+    fetchPending()
+    timer = window.setInterval(fetchPending, 30000)
+    return () => {
+      if (timer) window.clearInterval(timer)
+    }
+  }, [])
+
+  const reviewLabel =
+    pendingCount > 0 ? (
+      <Badge count={pendingCount} size="small" offset={[8, 0]}>
+        <span style={{ marginRight: 12 }}>题目审核</span>
+      </Badge>
+    ) : (
+      '题目审核'
+    )
+
+  const menuItems: MenuProps['items'] = [
+    { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
+    { key: '/questions', icon: <QuestionCircleOutlined />, label: '题库' },
+    { key: '/practice', icon: <EditOutlined />, label: '做题训练' },
+    { key: '/wrong-questions', icon: <CarryOutOutlined />, label: '错题本' },
+    { key: '/review', icon: <AuditOutlined />, label: reviewLabel },
+    { key: '/analytics/questions', icon: <BarChartOutlined />, label: '题目分析' },
+    { key: '/analytics/practice', icon: <LineChartOutlined />, label: '做题分析' },
+    { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
+  ]
 
   const selectedKey =
     menuItems

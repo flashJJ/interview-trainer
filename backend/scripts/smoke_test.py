@@ -114,6 +114,56 @@ def main() -> None:
         resp = client.get("/questions/stats/overview", headers=headers)
         check("题库统计", resp.json()["total"] > 0)
 
+        # ---------- 3.5 出题审核流 ----------
+        print("[3.5] 出题审核流")
+        # v1.2 起新生成的题默认进入待审核；先批量通过首批题（模拟人工审核），供后续组卷使用
+        all_created_ids = [q["id"] for q in gen["created"]] + [q["id"] for q in again["created"]]
+        resp = client.post(
+            "/questions/review/batch",
+            json={"question_ids": all_created_ids, "action": "approve"},
+            headers=headers,
+        )
+        check("批量通过首批题目", resp.status_code == 200 and resp.json()["updated"] == len(all_created_ids), resp.text[:100])
+
+        resp = client.post(
+            "/questions/generate",
+            json={"entry_id": entry_id, "types": ["judge"], "count_per_type": 2},
+            headers=headers,
+        )
+        gen2 = resp.json()
+        check(
+            "新生成的题进入待审核",
+            all(q["review_status"] == "pending" for q in gen2["created"]),
+            resp.text[:100],
+        )
+        pending_ids = [q["id"] for q in gen2["created"]]
+
+        resp = client.get("/questions?review_status=pending&size=10", headers=headers)
+        check("待审核列表可见", resp.status_code == 200 and len(resp.json()["items"]) > 0)
+
+        if pending_ids:
+            qid = pending_ids[0]
+            resp = client.put(
+                f"/questions/{qid}",
+                json={"explanation": "冒烟测试编辑后的解析"},
+                headers=headers,
+            )
+            check(
+                "编辑题目",
+                resp.status_code == 200 and resp.json()["explanation"] == "冒烟测试编辑后的解析",
+                resp.text[:100],
+            )
+            resp = client.post(f"/questions/{qid}/review", json={"action": "approve"}, headers=headers)
+            check("单题审核通过", resp.json()["review_status"] == "approved")
+
+        if len(pending_ids) > 1:
+            resp = client.post(
+                "/questions/review/batch",
+                json={"question_ids": [pending_ids[1]], "action": "reject"},
+                headers=headers,
+            )
+            check("批量审核拒绝", resp.status_code == 200 and resp.json()["updated"] == 1, resp.text[:100])
+
         # ---------- 4. 组卷 ----------
         print("[4] 随机组卷")
         resp = client.post(
