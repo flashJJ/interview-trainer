@@ -76,6 +76,52 @@ class LLMClient:
             data = resp.json()
         return data["choices"][0]["message"]["content"]
 
+    def chat_stream(self, messages: list[dict], temperature: float = 0.3, max_tokens: int = 2000):
+        """流式对话：逐 chunk yield 文本增量（SSE 转发用）。
+
+        非流式回退：若服务端忽略 stream 参数返回完整响应，也能正常解析。
+        """
+        cfg = self._cfg
+        if not cfg.llm_enabled:
+            raise RuntimeError("LLM 未配置（请在系统配置页或 .env 中填写 Base URL 与 API Key）")
+        url = cfg.llm_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {cfg.llm_api_key}",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "model": cfg.llm_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        with httpx.Client(timeout=cfg.llm_timeout_seconds) as client:
+            with client.stream("POST", url, headers=headers, json=body) as resp:
+                resp.raise_for_status()
+                content_type = resp.headers.get("content-type", "")
+                if "text/event-stream" not in content_type:
+                    # 服务端未按流式返回：整体读出后一次性 yield
+                    data = resp.json()
+                    text = data["choices"][0]["message"]["content"]
+                    if text:
+                        yield text
+                    return
+                for line in resp.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    payload = line[len("data:") :].strip()
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                        delta = chunk["choices"][0].get("delta", {})
+                        text = delta.get("content")
+                        if text:
+                            yield text
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+
     def chat_json(self, messages: list[dict], temperature: float = 0.3):
         """调用并解析 JSON；解析失败时带上下文请求模型自我修复（最多 2 次）。"""
         messages = list(messages)

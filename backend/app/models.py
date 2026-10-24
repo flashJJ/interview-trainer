@@ -186,6 +186,38 @@ class ExamAnswer(Base):
     question = relationship("Question")
 
 
+class AIChatSession(Base):
+    """AI 讲题会话（按题目归档，一题可有多个会话）。"""
+
+    __tablename__ = "ai_chat_sessions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
+    title = Column(String(200), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = relationship(
+        "AIChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="AIChatMessage.id"
+    )
+    question = relationship("Question")
+
+
+class AIChatMessage(Base):
+    """AI 讲题消息（user / assistant）。"""
+
+    __tablename__ = "ai_chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey("ai_chat_sessions.id"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # user | assistant
+    content = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("AIChatSession", back_populates="messages")
+
+
 class WrongQuestion(Base):
     """错题本：答错的题目 + SM-2 间隔重复排期。"""
 

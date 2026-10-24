@@ -353,6 +353,30 @@ def main() -> None:
         )
         check("原密码错误被拒绝", resp.status_code == 400)
 
+        # ---------- 7.5 AI 讲题 ----------
+        print("[7.5] AI 讲题")
+        target_qid = gen["created"][0]["id"]
+        resp = client.post("/chat/sessions", json={"question_id": target_qid}, headers=headers)
+        check("创建讲题会话", resp.status_code == 201, resp.text[:100])
+        chat_sid = resp.json()["id"]
+
+        resp = client.post(
+            f"/chat/sessions/{chat_sid}/messages",
+            json={"content": "请讲解这道题"},
+            headers=headers,
+        )
+        check(
+            "未配置 LLM 时发送明确拒绝并引导配置",
+            resp.status_code == 400 and "LLM" in resp.json()["detail"],
+            resp.text[:100],
+        )
+
+        resp = client.get(f"/chat/sessions/{chat_sid}/messages", headers=headers)
+        check("讲题历史消息", resp.status_code == 200 and isinstance(resp.json(), list))
+
+        resp = client.get(f"/chat/sessions?question_id={target_qid}", headers=headers)
+        check("题目会话列表", resp.status_code == 200 and len(resp.json()) >= 1)
+
         # ---------- 8. 边界与错误处理 ----------
         print("[8] 边界与错误处理")
         resp = client.post("/knowledge/entries", json={"title": "x", "content": "太短"}, headers=headers)

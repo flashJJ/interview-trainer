@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Card, Col, Descriptions, Empty, Radio, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { App as AntdApp } from 'antd'
-import { CarryOutOutlined } from '@ant-design/icons'
+import { CarryOutOutlined, RobotOutlined } from '@ant-design/icons'
 import { examApi } from '../api/client'
+import AITutorDrawer from '../components/AITutorDrawer'
 import type { SessionDetailResp, SubmitResultItem } from '../api/types'
 import {
   fmtDuration,
@@ -25,6 +26,10 @@ function AnswerText({ q, user }: { q: SubmitResultItem; user: string | null }) {
 }
 
 export default function ExamResult() {
+  const [tutorOpen, setTutorOpen] = useState(false)
+  const [tutorQuestionId, setTutorQuestionId] = useState<number | null>(null)
+  const [tutorTitle, setTutorTitle] = useState('')
+
   const { message } = AntdApp.useApp()
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
@@ -75,6 +80,12 @@ export default function ExamResult() {
 
   return (
     <div>
+      <AITutorDrawer
+        questionId={tutorQuestionId}
+        questionTitle={tutorTitle}
+        open={tutorOpen}
+        onClose={() => setTutorOpen(false)}
+      />
       <Card title="考试结果" style={{ marginBottom: 16 }}>
         <Row gutter={16}>
           <Col span={6}>
@@ -125,6 +136,18 @@ export default function ExamResult() {
                     已计入错题本
                   </Tag>
                 )}
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<RobotOutlined />}
+                  onClick={() => {
+                    setTutorQuestionId(q.question_id)
+                    setTutorTitle(q.content)
+                    setTutorOpen(true)
+                  }}
+                >
+                  问 AI
+                </Button>
               </Space>
             }
           >
