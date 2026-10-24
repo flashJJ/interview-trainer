@@ -17,6 +17,7 @@ import AITutorDrawer from '../components/AITutorDrawer'
 import { useWrongMutations, useWrongQuestions, useWrongStats } from '@/hooks/useWrongQuestions'
 import type { Difficulty, QType, WrongQuestionItem } from '@/api/types'
 import { DIFFICULTY_COLOR, DIFFICULTY_TEXT, Q_TYPE_COLOR, Q_TYPE_TEXT } from '@/utils/constants'
+import { stickyTableConfig } from '@/utils/stickyTable'
 
 export default function WrongQuestions() {
   const { message } = AntdApp.useApp()
@@ -294,6 +295,7 @@ export default function WrongQuestions() {
           columns={columns}
           dataSource={items}
           scroll={{ x: 1040 }}
+          sticky={stickyTableConfig}
           pagination={{
             current: page,
             pageSize: size,
