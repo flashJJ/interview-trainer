@@ -120,17 +120,23 @@ EMBEDDING_MODEL=BAAI/bge-m3
 ┌────────────────────────────────────────────────────────────┐
 │ 前端 React + AntD + ECharts（5173）                        │
 │  知识库 │ 题库 │ 做题训练 │ 考试/结果 │ 题目分析 │ 做题分析   │
+│  检索评测 │ 掌握度雷达 │ 系统配置                            │
 └───────────────────────┬────────────────────────────────────┘
                         │ HTTP /api（JWT）
 ┌───────────────────────▼────────────────────────────────────┐
 │ FastAPI 后端（8000）                                        │
 │  routers: auth / knowledge / questions / exams / analytics │
+│           wrong-questions / chat / retrieval / mastery      │
 │  services:                                                 │
 │    chunker      段落→句读二级切分（300~500 字/块）          │
 │    embeddings   API 向量 or 内置确定性向量（中文 n-gram）    │
 │    vector_store ChromaDB 封装（kb_chunks / questions）      │
+│    bm25/retrieval  BM25 索引 + 混合检索（RRF 融合）          │
+│    retrieval_eval  检索评测集构建与 Recall/MRR/Hit@1 度量   │
 │    generator    LLM 出题 + 规则引擎降级 + 向量去重           │
 │    grader       客观题精确匹配 + 填空语义相似度/LLM 评判     │
+│    srs          SM-2 间隔重复排期                            │
+│    mastery      掌握度聚合（时间衰减 + 置信度收缩）+ 定向取材 │
 │    stats        两张分析看板的聚合查询                       │
 └──────────────┬──────────────────────┬──────────────────────┘
                │ SQLAlchemy           │ ChromaDB
@@ -145,17 +151,19 @@ EMBEDDING_MODEL=BAAI/bge-m3
 | 流程 | 说明 |
 |---|---|
 | 录入处理 | 文本/文件录入 → 分块 → 关键词提取 → 向量化 → 入 ChromaDB，状态机 `processing → ready/failed` |
-| AI 出题 | 选素材块 → LLM（或规则引擎）生成单选/填空/判断 + 标准答案 + 解析 → JSON 修复重试 → **向量去重**（≥0.95 相似度舍弃）→ 入库 |
+| AI 出题 | 选素材块（可填「知识点聚焦」走混合检索取材）→ LLM（或规则引擎）生成单选/填空/判断 + 标准答案 + 解析 → JSON 修复重试 → **向量去重**（≥0.95 相似度舍弃）→ 入库 |
 | 随机组卷 | 按题型组合/难度/来源随机不重复抽样，库存不足明确报错 |
+| 掌握度与定向训练 | 按资料/题型/难度聚合作答记录（时间衰减 + 置信度收缩）→ 雷达图 + 薄弱项推荐 → 一键定向组卷（错题优先） |
 | 在线考试 | 会话级考试，**防抖自动保存草稿**，刷新/退出后续考恢复已填答案 |
 | AI 评分 | 选择/判断精确匹配；填空：等价答案包含 → LLM 评判 → 语义相似度分档（≥0.8 满分 / ≥0.5 半分）；逐题反馈 + 总分/得分率/用时 |
 | 题目分析 | 总量、AI/规则生成占比、题型分布、难度分布、收录 Top10、正确率最低 10 题 |
 | 做题分析 | 考试场次、平均得分率、累计答题、分题型正确率、30 天成绩趋势、最近考试 |
 
-### 数据模型（8 张表）
+### 数据模型（13 张表）
 
 `users` → `knowledge_entries` → `knowledge_chunks` → `questions`
 `exam_papers` → `exam_paper_questions` → `exam_sessions` → `exam_answers`
+`wrong_questions`（SM-2）｜ `ai_chat_sessions` → `ai_chat_messages` ｜ `retrieval_eval_cases` → `retrieval_eval_runs`
 
 完整 ER 图、API 契约、技术选型对比见 [`docs/01-需求分析与架构设计.md`](docs/01-需求分析与架构设计.md)。
 
@@ -166,10 +174,10 @@ EMBEDDING_MODEL=BAAI/bge-m3
 ```bash
 cd backend
 
-# 单元测试（41 个）：分块 / 文本相似度 / 评分器 / 规则出题
+# 单元测试（140 个）：分块 / 文本相似度 / 评分器 / 规则出题 / SM-2 / 导入 / 讲题 / BM25 / 检索 / 掌握度
 python -m pytest
 
-# 全链路 API 冒烟测试（45 项断言，可重复执行）
+# 全链路 API 冒烟测试（116 项断言，可重复执行）
 # 需先启动后端：uvicorn app.main:app --port 8000
 python scripts/smoke_test.py
 
@@ -180,10 +188,10 @@ python scripts/smoke_test.py
 
 | 验证项 | 结果 |
 |---|---|
-| `pytest` 单元测试 | **81 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4） |
-| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/边界） | **73/73 通过** |
+| `pytest` 单元测试 | **140 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4 + BM25 7 + 检索 19 + 评测 9 + 掌握度 24） |
+| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/检索评测/掌握度/边界） | **116/116 通过** |
 | 前端 `tsc --noEmit` + `vite build` | **通过，0 错误** |
-| 浏览器 E2E（Edge，全页面 + 完整考试 + 审核流 + 导入错误路径 + 讲题入口降级） | **13/13 通过，控制台 0 错误** |
+| 浏览器 E2E（Edge，全页面 + 完整考试 + 审核流 + 导入错误路径 + 讲题 + 检索评测 + 掌握度定向练习） | **15/15 通过** |
 
 ---
 
@@ -203,7 +211,7 @@ interview-trainer/
 │   ├── requirements.txt
 │   └── .env.example                   # LLM/Embedding 配置样例
 └── frontend/
-    ├── src/pages/                     # 12 个业务页面（含系统配置、检索评测）
+    ├── src/pages/                     # 13 个业务页面（含系统配置、检索评测、掌握度）
     └── src/api/                       # axios 客户端 + 类型定义
 ```
 
@@ -219,8 +227,7 @@ interview-trainer/
 - 未配置真实 Embedding 时，内置向量为字符 n-gram 哈希（本质是词法匹配），
   混合检索的收益受限——请用「检索评测」页实测后再决定向量通道权重
 
-**演进路线**：PostgreSQL + pgvector 一体化、知识点掌握度雷达与定向训练、
-检索接入出题链路、Docker Compose 一键部署、Anki 导出。
+**演进路线**：PostgreSQL + pgvector 一体化、Docker Compose 一键部署、Anki 导出、多用户。
 
 ---
 

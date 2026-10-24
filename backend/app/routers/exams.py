@@ -26,7 +26,9 @@ from ..schemas import (
     StartExamOut,
     SubmitExamIn,
     SubmitExamOut,
+    TargetedExamIn,
 )
+from ..services import mastery as mastery_service
 from ..services.grader import Grader, grade_and_submit_session
 from ..services.runtime import get_embeddings, get_llm
 
@@ -117,6 +119,61 @@ def generate_exam(
                 "types": payload.types,
                 "difficulty": payload.difficulty,
                 "entry_ids": payload.entry_ids,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.add(paper)
+    db.flush()
+    for order, question in enumerate(questions):
+        db.add(ExamPaperQuestion(paper_id=paper.id, question_id=question.id, order=order))
+    db.commit()
+    db.refresh(paper)
+    return _paper_out(db, paper, current_user.id)
+
+
+# ---------------------------------------------------------------- 定向组卷
+@router.post("/targeted", response_model=ExamPaperOut)
+def generate_targeted_exam(
+    payload: TargetedExamIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """从薄弱维度一键组卷：错题本未掌握 → 从未作答 → 其余。"""
+    try:
+        questions = mastery_service.targeted_questions(
+            db,
+            current_user.id,
+            dim=payload.dim,
+            key=payload.key,
+            count=payload.count,
+            types=payload.types,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    random.shuffle(questions)
+    stats = mastery_service.dimension_mastery(db, current_user.id, payload.dim, payload.key)
+    label = stats["label"] if stats else str(payload.key)
+    mastery_value = stats["mastery"] if stats else 0.5
+    title = payload.title.strip() or (
+        f"针对性练习 · {mastery_service.DIM_TEXT.get(payload.dim, payload.dim)}「{label}」"
+        f"（掌握度 {mastery_value * 100:.0f}%）"
+    )
+
+    paper = ExamPaper(
+        user_id=current_user.id,
+        title=title,
+        question_count=len(questions),
+        config=json.dumps(
+            {
+                "mode": "targeted",
+                "dim": payload.dim,
+                "key": payload.key,
+                "label": label,
+                "mastery": mastery_value,
+                "count": payload.count,
+                "types": payload.types,
             },
             ensure_ascii=False,
         ),

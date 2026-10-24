@@ -13,6 +13,7 @@ from .routers import (
     chat,
     exams,
     knowledge,
+    mastery,
     questions,
     retrieval,
     settings,
@@ -56,6 +57,7 @@ app.include_router(settings_router.router, prefix=settings.api_prefix)
 app.include_router(wrong_questions.router, prefix=settings.api_prefix)
 app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(retrieval.router, prefix=settings.api_prefix)
+app.include_router(mastery.router, prefix=settings.api_prefix)
 
 
 @app.get("/api/health")

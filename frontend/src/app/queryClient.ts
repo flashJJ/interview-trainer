@@ -56,6 +56,13 @@ export const queryKeys = {
   settings: {
     config: ['settings', 'config'] as const,
   },
+  mastery: {
+    all: ['mastery'] as const,
+    overview: (threshold: number) => ['mastery', 'overview', threshold] as const,
+    dimensions: (dim: string) => ['mastery', 'dimensions', dim] as const,
+    radar: ['mastery', 'radar'] as const,
+    weak: (threshold: number, limit: number) => ['mastery', 'weak', threshold, limit] as const,
+  },
   retrieval: {
     all: ['retrieval'] as const,
     overview: ['retrieval', 'overview'] as const,

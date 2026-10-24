@@ -172,9 +172,13 @@ export default function KnowledgeBase() {
         types: values.types,
         count_per_type: Number(values.count_per_type),
         difficulty: values.difficulty,
+        focus: values.focus?.trim() || undefined,
       })
+      const retrievalNote = resp.retrieval?.used
+        ? `；取材经混合检索聚焦「${resp.retrieval.focus}」，命中 ${resp.retrieval.hit_count} 个知识块`
+        : ''
       message.success(
-        `已生成 ${resp.created_count} 道题（${resp.mode === 'llm' ? 'AI 生成' : '规则生成'}）`,
+        `已生成 ${resp.created_count} 道题（${resp.mode === 'llm' ? 'AI 生成' : '规则生成'}）${retrievalNote}`,
       )
       setGenTarget(null)
     } catch (err) {

@@ -22,6 +22,7 @@ from ..schemas import (
     QuestionOut,
     QuestionStatsOut,
     QuestionUpdateIn,
+    RetrievalReceipt,
     ReviewActionIn,
 )
 from ..services.generator import (
@@ -80,6 +81,27 @@ def _validate_question_payload(data: dict, q_type: str) -> str | None:
     return None
 
 
+def _focus_chunk_ids(
+    db, user_id: int, focus: str, top_k: int, entry_id: int | None = None
+) -> list[int]:
+    """用 v1.5 的混合检索挑出与 focus 最相关的块 id。
+
+    检索依赖向量库与 Embedding，任一环节失败都返回空列表，由调用方回退到
+    「整篇资料所有块」——出题是核心链路，不能被检索拖垮。
+    """
+    try:
+        from ..services import retrieval
+
+        hits = retrieval.retrieve(
+            db, user_id, focus, top_k=top_k, mode=retrieval.MODE_HYBRID
+        )
+    except Exception:  # noqa: BLE001 - 检索失败静默回退
+        return []
+    if entry_id is not None:
+        hits = [h for h in hits if h.entry_id == entry_id]
+    return [h.chunk_id for h in hits]
+
+
 @router.post("/generate", response_model=GenerateQuestionsOut)
 def generate_questions(
     payload: GenerateQuestionsIn,
@@ -112,6 +134,26 @@ def generate_questions(
     if not chunks:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "知识库为空，请先录入资料")
 
+    # 知识点聚焦：用 v1.5 的混合检索挑相关块作为素材，替代「整篇资料所有块」
+    receipt = RetrievalReceipt(used=False)
+    focus = (payload.focus or "").strip()
+    if focus:
+        focused_ids = _focus_chunk_ids(
+            db, current_user.id, focus, payload.retrieval_top_k, payload.entry_id
+        )
+        if focused_ids:
+            ordered = {c.id: c for c in chunks}
+            picked = [ordered[cid] for cid in focused_ids if cid in ordered]
+            if picked:
+                chunks = picked
+                receipt = RetrievalReceipt(
+                    used=True,
+                    focus=focus,
+                    mode="hybrid",
+                    hit_count=len(picked),
+                    chunk_ids=[c.id for c in picked],
+                )
+
     chunk_likes = [
         ChunkLike(id=c.id, content=c.content, entry_id=c.entry_id) for c in chunks
     ]
@@ -133,12 +175,19 @@ def generate_questions(
         )
         refresh_entry_question_counts(db, [d.entry_id for d in outcome.drafts])
 
+    message = f"{outcome.message}（新题待审核，通过后进入组卷池）"
+    if receipt.used:
+        message += f"；取材经混合检索聚焦「{focus}」，命中 {receipt.hit_count} 个知识块"
+    else:
+        message += "；取材使用全部知识块（未指定聚焦或检索无命中，已回退）"
+
     return GenerateQuestionsOut(
         created=[_question_out(q) for q in created_questions],
         created_count=len(created_questions),
         skipped_count=outcome.skipped_count,
         mode=outcome.mode,
-        message=f"{outcome.message}（新题待审核，通过后进入组卷池）",
+        message=message,
+        retrieval=receipt,
     )
 
 

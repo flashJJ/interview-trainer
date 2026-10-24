@@ -7,6 +7,8 @@ export interface GenForm {
   types: QType[]
   count_per_type: number
   difficulty?: Difficulty
+  /** 知识点聚焦：留空则用整篇资料的块取材 */
+  focus?: string
 }
 
 interface GenerateQuestionsModalProps {
@@ -37,7 +39,7 @@ export default function GenerateQuestionsModal({
       <Form<GenForm>
         layout="vertical"
         form={form}
-        initialValues={{ types: [...QTYPES], count_per_type: 3 }}
+        initialValues={{ types: [...QTYPES], count_per_type: 3, focus: '' }}
         onFinish={onSubmit}
       >
         <Form.Item
@@ -65,10 +67,17 @@ export default function GenerateQuestionsModal({
             options={DIFFICULTIES.map((d) => ({ label: DIFFICULTY_TEXT[d], value: d }))}
           />
         </Form.Item>
+        <Form.Item
+          name="focus"
+          label="知识点聚焦（可选）"
+          tooltip="填写后先用混合检索（向量 + BM25）挑出最相关的知识块作为出题素材"
+        >
+          <Input placeholder="例如：Redis 持久化、GIL 与多进程" maxLength={100} allowClear />
+        </Form.Item>
         <Alert
           type="info"
           showIcon
-          message="未配置 LLM API Key 时将使用内置规则引擎生成题目，质量以 UI 徽标为准。"
+          message="未配置 LLM API Key 时将使用内置规则引擎生成题目，质量以 UI 徽标为准；填写「知识点聚焦」后仅从检索命中的知识块取材，检索无命中时自动回退到全篇取材。"
           style={{ marginBottom: 16 }}
         />
         <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
