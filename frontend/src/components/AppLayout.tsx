@@ -82,7 +82,7 @@ export default function AppLayout() {
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Sider breakpoint="lg" collapsedWidth="0" theme="dark">
         <div
           style={{
@@ -107,7 +107,7 @@ export default function AppLayout() {
           onClick={({ key }) => navigate(key)}
         />
       </Sider>
-      <Layout style={{ minWidth: 0 }}>
+      <Layout style={{ minWidth: 0, height: '100vh' }}>
         <Header
           style={{
             background: '#fff',
@@ -116,6 +116,8 @@ export default function AppLayout() {
             alignItems: 'center',
             justifyContent: 'flex-end',
             boxShadow: '0 1px 4px rgba(0,21,41,0.08)',
+            flex: '0 0 auto',
+            zIndex: 10,
           }}
         >
           <Dropdown menu={{ items: userMenu }} placement="bottomRight">
@@ -125,13 +127,22 @@ export default function AppLayout() {
             </Space>
           </Dropdown>
         </Header>
-        <Content style={{ margin: 24, padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
+        <Content
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            margin: 24,
+            padding: 24,
+            background: '#f5f5f5',
+          }}
+        >
           <div
             style={{
               background: '#fff',
               borderRadius: 8,
               padding: 24,
-              minHeight: 'calc(100vh - 160px)',
+              minHeight: '100%',
               maxWidth: '100%',
               overflow: 'hidden',
             }}
