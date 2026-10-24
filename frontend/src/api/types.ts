@@ -31,6 +31,9 @@ export interface LoginResp {
 export type EntrySourceType = 'text' | 'file' | 'url'
 export type EntryStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
+/** 题目审核状态（v1.2 审核流）。 */
+export type ReviewStatus = 'pending' | 'approved' | 'rejected'
+
 export interface KnowledgeEntry {
   id: number
   title: string
@@ -96,7 +99,7 @@ export interface Question {
   entry_id: number | null
   entry_title: string | null
   source: QuestionSource
-  review_status: 'pending' | 'approved' | 'rejected'
+  review_status: ReviewStatus
   created_at: string
 }
 

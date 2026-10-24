@@ -248,10 +248,9 @@ export default function Review() {
         okText="保存并通过"
         cancelText="取消"
         width={640}
-        destroyOnHidden
+        forceRender
       >
-        {editing && (
-          <Form<EditFormValues>
+        <Form<EditFormValues>
             form={form}
             layout="vertical"
             onFinish={onEditSubmit}
@@ -263,9 +262,9 @@ export default function Review() {
               label="题干"
               rules={[{ required: true, message: '请输入题干' }]}
               extra={
-                editing.q_type === 'fill'
+                editing?.q_type === 'fill'
                   ? '填空题题干需包含 ______ 空位'
-                  : editing.q_type === 'judge'
+                  : editing?.q_type === 'judge'
                     ? '判断题题干为完整陈述'
                     : undefined
               }
@@ -273,7 +272,7 @@ export default function Review() {
               <Input.TextArea rows={3} />
             </Form.Item>
 
-            {editing.q_type === 'choice' && (
+            {editing?.q_type === 'choice' && (
               <Form.Item label="选项（A/B/C/D）" required>
                 <Space direction="vertical" style={{ width: '100%' }}>
                   {[0, 1, 2, 3].map((i) => (
@@ -295,7 +294,7 @@ export default function Review() {
               label="标准答案"
               rules={[{ required: true, message: '请输入标准答案' }]}
             >
-              {editing.q_type === 'choice' ? (
+              {editing?.q_type === 'choice' ? (
                 <Select
                   options={[
                     { value: 'A', label: 'A' },
@@ -304,7 +303,7 @@ export default function Review() {
                     { value: 'D', label: 'D' },
                   ]}
                 />
-              ) : editing.q_type === 'judge' ? (
+              ) : editing?.q_type === 'judge' ? (
                 <Select
                   options={[
                     { value: '正确', label: '正确' },
@@ -329,8 +328,7 @@ export default function Review() {
                 ]}
               />
             </Form.Item>
-          </Form>
-        )}
+        </Form>
       </Modal>
     </div>
   )

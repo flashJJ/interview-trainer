@@ -349,6 +349,9 @@ def save_exam_answers(
     for row in existing.values():
         if not row.user_answer.strip():
             db.delete(row)
-    db.commit()
+    # 草稿保存是高频短写，与其他写事务争抢 SQLite 写锁时退避重试，避免 500
+    from ..database import commit_with_retry
+
+    commit_with_retry(db)
     saved = sum(1 for a in session.answers if a.user_answer.strip())
     return {"ok": True, "saved": saved}
