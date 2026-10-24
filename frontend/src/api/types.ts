@@ -117,6 +117,9 @@ export interface GenerateQuestionsReq {
   types: QType[]
   count_per_type: number
   difficulty?: Difficulty
+  /** 知识点聚焦：非空时后端用混合检索挑相关块取材 */
+  focus?: string
+  retrieval_top_k?: number
 }
 
 export interface GenerateQuestionsResp {
@@ -125,6 +128,14 @@ export interface GenerateQuestionsResp {
   skipped_count: number
   mode: QuestionSource
   message: string
+  /** 取材回执：本次出题是否走了检索聚焦、命中了哪些块 */
+  retrieval?: {
+    used: boolean
+    focus: string
+    mode: string
+    hit_count: number
+    chunk_ids: number[]
+  }
 }
 
 export interface QuestionStatsOverview {
@@ -164,6 +175,58 @@ export interface ExamPaper {
 export interface ExamPaperDetail {
   paper: ExamPaper
   questions: ExamQuestion[]
+}
+
+// ===== 掌握度 =====
+
+export type MasteryDim = 'q_type' | 'difficulty' | 'entry'
+
+export interface MasteryItem {
+  key: string
+  label: string
+  answered: number
+  correct: number
+  accuracy: number
+  avg_score_rate: number
+  weight: number
+  /** 0~1 样本充分度；低值时 mastery 已被向 0.5 收缩，不宜直接下结论 */
+  confidence: number
+  /** 0~1，0.5 表示未观测/样本不足 */
+  mastery: number
+  question_count: number
+  wrong_pending: number
+  dim: MasteryDim
+  dim_label: string
+}
+
+export interface MasteryDimension {
+  dim: MasteryDim
+  dim_label: string
+  items: MasteryItem[]
+}
+
+export interface MasteryRadar {
+  indicators: Array<{ name: string; max: number }>
+  values: number[]
+  groups: Array<{ dim: MasteryDim; label: string; count: number }>
+}
+
+export interface MasteryWeak {
+  threshold: number
+  items: MasteryItem[]
+}
+
+export interface MasteryOverview {
+  total_answered: number
+  total_correct: number
+  overall_accuracy: number
+  overall_mastery: number
+  confidence: number
+  weak_count: number
+  tested_dimension_count: number
+  wrong_pending_total: number
+  threshold: number
+  top_weak: MasteryItem | null
 }
 
 export interface ExamQuestion {

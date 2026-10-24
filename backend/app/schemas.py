@@ -165,6 +165,18 @@ class GenerateQuestionsIn(BaseModel):
     types: List[str] = Field(default=["choice", "fill", "judge"])
     count_per_type: int = Field(default=3, ge=1, le=10)
     difficulty: Optional[str] = None
+    focus: str = ""  # 知识点聚焦：非空时用混合检索取材，替代「整篇资料所有块」
+    retrieval_top_k: int = Field(default=8, ge=1, le=30)
+
+
+class RetrievalReceipt(BaseModel):
+    """出题取材的检索回执：让「这次题从哪几块来的」可见、可核对。"""
+
+    used: bool
+    focus: str = ""
+    mode: str = "hybrid"
+    hit_count: int = 0
+    chunk_ids: List[int] = []
 
 
 class GenerateQuestionsOut(BaseModel):
@@ -173,6 +185,7 @@ class GenerateQuestionsOut(BaseModel):
     skipped_count: int
     mode: str
     message: str
+    retrieval: RetrievalReceipt = RetrievalReceipt(used=False)
 
 
 class QuestionStatsOut(BaseModel):
@@ -575,3 +588,60 @@ class ChunkPickerItem(BaseModel):
     entry_title: str
     seq: int
     preview: str
+
+
+# ---------------------------------------------------------------- 掌握度
+class MasteryItem(BaseModel):
+    """单个维度键（如「单选」「困难」「某份资料」）的掌握度。"""
+
+    key: str
+    label: str
+    answered: int = 0
+    correct: int = 0
+    accuracy: float = 0.0
+    avg_score_rate: float = 0.0
+    weight: float = 0.0          # 时间衰减后的累计观测权重
+    confidence: float = 0.0      # 0~1，样本充分度；低值时 mastery 已被向 0.5 收缩
+    mastery: float = 0.5         # 0~1，0.5 表示未观测/样本不足
+    question_count: int = 0      # 该维度可练的已审核题数
+    wrong_pending: int = 0       # 仍在错题本中未掌握的题数
+    dim: str = ""
+    dim_label: str = ""
+
+
+class MasteryDimensionOut(BaseModel):
+    dim: str
+    dim_label: str
+    items: List[MasteryItem]
+
+
+class MasteryRadarOut(BaseModel):
+    indicators: List[dict]  # [{name, max}]：题型 3 轴 + 难度 3 轴
+    values: List[float]     # 百分数，与 indicators 一一对应
+    groups: List[dict]
+
+
+class MasteryWeakOut(BaseModel):
+    threshold: float
+    items: List[MasteryItem]
+
+
+class MasteryOverviewOut(BaseModel):
+    total_answered: int
+    total_correct: int
+    overall_accuracy: float
+    overall_mastery: float
+    confidence: float
+    weak_count: int
+    tested_dimension_count: int
+    wrong_pending_total: int
+    threshold: float
+    top_weak: Optional[MasteryItem] = None
+
+
+class TargetedExamIn(BaseModel):
+    dim: str = Field(default="q_type", pattern="^(q_type|difficulty|entry)$")
+    key: str = ""                       # choice/fill/judge、easy/medium/hard 或资料 id
+    count: int = Field(default=10, ge=1, le=100)
+    types: List[str] = Field(default=["choice", "fill", "judge"])
+    title: str = ""

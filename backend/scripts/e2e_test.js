@@ -283,6 +283,37 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   });
   await page.screenshot({ path: `${OUT}/12-retrieval.png`, fullPage: true });
 
+  await step('掌握度页（雷达图 + 维度明细 + 一键定向练习）', async () => {
+    await menuClick(/掌\s*握\s*度/);
+    await page.getByText('知识点掌握度').first().waitFor({ timeout: 10000 });
+    await page.getByText('掌握度口径').waitFor({ timeout: 5000 });
+    await page.getByText('综合掌握度').first().waitFor({ timeout: 5000 });
+
+    // 雷达图（ECharts canvas）
+    await page.locator('canvas').first().waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+
+    // 维度明细表：默认按资料，种子资料均应在列
+    const rowCount = await page.locator('.ant-table-tbody tr').count();
+    if (rowCount < 1) throw new Error(`维度明细表无数据行：${rowCount}`);
+    // 页面本身先截一张（组卷成功后会跳转到考试页）
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${OUT}/13-mastery.png`, fullPage: true });
+
+    // 薄弱项「一键练习」优先；没有薄弱项时退回维度表首行的「针对性练习」
+    let practiceBtn = page.getByRole('button', { name: /一\s*键\s*练\s*习/ }).first();
+    if ((await practiceBtn.count()) === 0) {
+      practiceBtn = page.getByRole('button', { name: /针\s*对\s*性\s*练\s*习/ }).first();
+    }
+    if ((await practiceBtn.count()) === 0) throw new Error('未找到定向练习入口');
+    await practiceBtn.click();
+    await page.getByText(/针对性练习 ·/).first().waitFor({ timeout: 8000 });
+    await page.getByRole('button', { name: /组\s*卷\s*并\s*开\s*始/ }).click();
+    await page.waitForURL('**/exam/**', { timeout: 15000 });
+    await page.waitForTimeout(1200);
+  });
+  await page.screenshot({ path: `${OUT}/14-targeted-exam.png`, fullPage: true });
+
   await browser.close();
 
   console.log(report.join('\n'));

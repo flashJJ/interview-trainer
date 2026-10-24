@@ -514,6 +514,145 @@ def main() -> None:
             client.get("/retrieval/cases", headers=headers).json() == [],
         )
 
+        # ---------- 7.7 掌握度与定向训练 ----------
+        print("[7.7] 掌握度与定向训练")
+        resp = client.get("/mastery/overview", headers=headers)
+        ov = resp.json() if resp.status_code == 200 else {}
+        check(
+            "掌握度概览",
+            resp.status_code == 200 and ov.get("total_answered", 0) >= 1,
+            resp.text[:120],
+        )
+        check(
+            "综合掌握度取值合法(0~1)",
+            0.0 <= ov.get("overall_mastery", -1) <= 1.0 and 0.0 <= ov.get("confidence", -1) <= 1.0,
+            str(ov)[:160],
+        )
+
+        for dim, expect in (("q_type", {"choice", "fill", "judge"}), ("difficulty", {"easy", "medium", "hard"})):
+            resp = client.get(f"/mastery/dimensions?dim={dim}", headers=headers)
+            items = resp.json().get("items", []) if resp.status_code == 200 else []
+            keys = {i["key"] for i in items}
+            check(
+                f"维度掌握度 {dim}",
+                resp.status_code == 200 and expect.issubset(keys) and len(items) == 3,
+                resp.text[:120],
+            )
+            check(
+                f"{dim} 各项均含掌握度与置信度",
+                all(0.0 <= i["mastery"] <= 1.0 and 0.0 <= i["confidence"] <= 1.0 for i in items),
+                str(items)[:160],
+            )
+
+        resp = client.get("/mastery/dimensions?dim=entry", headers=headers)
+        entry_items = resp.json().get("items", []) if resp.status_code == 200 else []
+        check(
+            "资料维度含已录入资料",
+            resp.status_code == 200 and any(i["label"] for i in entry_items),
+            resp.text[:120],
+        )
+        check(
+            "未观测维度掌握度为中性 0.5",
+            all(i["mastery"] == 0.5 for i in entry_items if i["answered"] == 0),
+            str(entry_items)[:160],
+        )
+
+        resp = client.get("/mastery/dimensions?dim=bogus", headers=headers)
+        check("非法维度被拒绝(422)", resp.status_code == 422, resp.text[:120])
+
+        resp = client.get("/mastery/radar", headers=headers)
+        radar = resp.json() if resp.status_code == 200 else {}
+        check(
+            "雷达 6 轴（题型+难度）",
+            len(radar.get("indicators", [])) == 6 and len(radar.get("values", [])) == 6,
+            resp.text[:120],
+        )
+        check(
+            "雷达取值合法(0~100)",
+            all(0.0 <= v <= 100.0 for v in radar.get("values", [])),
+            str(radar.get("values"))[:120],
+        )
+
+        resp = client.get("/mastery/weak-points?threshold=0.6", headers=headers)
+        weak = resp.json() if resp.status_code == 200 else {}
+        check("薄弱项列表", resp.status_code == 200 and "items" in weak, resp.text[:120])
+        check(
+            "薄弱项均低于阈值且有题可练",
+            all(i["mastery"] < 0.6 and i["question_count"] > 0 for i in weak.get("items", [])),
+            str(weak.get("items"))[:160],
+        )
+
+        # 定向组卷：用「题型-单选」维度（前面已组卷并作答，样本足够）
+        resp = client.post(
+            "/exams/targeted",
+            json={"dim": "q_type", "key": "choice", "count": 2, "types": ["choice"]},
+            headers=headers,
+        )
+        tp = resp.json() if resp.status_code == 200 else {}
+        check("定向组卷", resp.status_code == 200 and tp.get("question_count") == 2, resp.text[:160])
+        check(
+            "定向卷标注来源维度",
+            tp.get("config", {}).get("mode") == "targeted" and tp.get("config", {}).get("dim") == "q_type",
+            str(tp.get("config"))[:160],
+        )
+        check("定向卷标题含掌握度", "掌握度" in tp.get("title", ""), tp.get("title", ""))
+
+        resp = client.post(
+            "/exams/targeted",
+            json={"dim": "q_type", "key": "choice", "count": 50, "types": ["choice"]},
+            headers=headers,
+        )
+        check(
+            "定向组卷库存不足明确报错",
+            resp.status_code == 400 and "仅" in resp.json()["detail"],
+            resp.text[:120],
+        )
+
+        resp = client.post(
+            "/exams/targeted",
+            json={"dim": "q_type", "key": "choice", "count": 999, "types": ["choice"]},
+            headers=headers,
+        )
+        check("题目数量超上限被拒绝(422)", resp.status_code == 422, resp.text[:120])
+
+        resp = client.post(
+            "/exams/targeted", json={"dim": "bogus", "key": "x", "count": 1}, headers=headers
+        )
+        check("非法维度组卷被拒绝(422)", resp.status_code == 422, resp.text[:120])
+
+        # 出题取材：知识点聚焦走混合检索
+        resp = client.post(
+            "/questions/generate",
+            json={
+                "entry_id": entry_id,
+                "types": ["choice"],
+                "count_per_type": 1,
+                "focus": "ETag 协商缓存",
+            },
+            headers=headers,
+        )
+        gr = resp.json() if resp.status_code == 200 else {}
+        check(
+            "出题聚焦走混合检索",
+            resp.status_code == 200 and gr.get("retrieval", {}).get("used") is True,
+            resp.text[:160],
+        )
+        check(
+            "聚焦命中知识块",
+            gr.get("retrieval", {}).get("hit_count", 0) >= 1,
+            str(gr.get("retrieval"))[:160],
+        )
+        resp = client.post(
+            "/questions/generate",
+            json={"entry_id": entry_id, "types": ["judge"], "count_per_type": 1},
+            headers=headers,
+        )
+        check(
+            "未聚焦时回退到全篇取材",
+            resp.status_code == 200 and resp.json().get("retrieval", {}).get("used") is False,
+            resp.text[:160],
+        )
+
         # ---------- 8. 边界与错误处理 ----------
         print("[8] 边界与错误处理")
         resp = client.post("/knowledge/entries", json={"title": "x", "content": "太短"}, headers=headers)
