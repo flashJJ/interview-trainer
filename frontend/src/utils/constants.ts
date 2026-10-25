@@ -18,6 +18,7 @@ export const SOURCE_TYPE_TEXT: Record<EntrySourceType, string> = {
   text: '文本',
   file: '文件',
   url: '网页',
+  builtin: '内置',
 }
 
 export const ENTRY_STATUS_TEXT: Record<EntryStatus, string> = {
@@ -30,6 +31,22 @@ export const ENTRY_STATUS_TEXT: Record<EntryStatus, string> = {
 export const QUESTION_SOURCE_TEXT: Record<QuestionSource, string> = {
   llm: 'AI 生成',
   rule: '规则生成',
+  builtin: '内置精选',
+}
+
+/** 题目来源徽标配色 */
+export const QUESTION_SOURCE_COLOR: Record<QuestionSource, string> = {
+  llm: 'magenta',
+  rule: 'default',
+  builtin: 'geekblue',
+}
+
+/** 知识库来源徽标配色 */
+export const SOURCE_TYPE_COLOR: Record<EntrySourceType, string> = {
+  text: 'default',
+  file: 'blue',
+  url: 'cyan',
+  builtin: 'geekblue',
 }
 
 export const ENTRY_STATUS_COLOR: Record<EntryStatus, string> = {
@@ -53,6 +70,7 @@ export const Q_TYPE_COLOR: Record<QType, string> = {
 
 export const QTYPES: QType[] = ['choice', 'fill', 'judge']
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard']
+export const QUESTION_SOURCES: QuestionSource[] = ['builtin', 'llm', 'rule']
 
 /** ISO 时间格式化为本地可读字符串 */
 export function fmtTime(iso: string | null | undefined): string {

@@ -6,7 +6,13 @@ __pycache__/
 venv/
 
 # 数据与密钥
-data/
+# 只忽略运行时数据（SQLite / ChromaDB），不忽略 backend/data/ 下的内置内容源码：
+# backend/data/builtin/ 是随产品分发的语料与题库，属于交付物，必须入库。
+/data/
+backend/data/chroma/
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
 .env
 
 # Node

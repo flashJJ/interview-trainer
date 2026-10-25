@@ -5,12 +5,14 @@ import { SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { questionApi } from '@/api/questions'
 import { useQuestionMutations, useQuestions } from '@/hooks/useQuestions'
-import type { Difficulty, PageResp, QType, Question } from '../api/types'
+import type { Difficulty, PageResp, QuestionSource, QType, Question } from '../api/types'
 import {
   DIFFICULTIES,
   DIFFICULTY_COLOR,
   DIFFICULTY_TEXT,
   fmtTime,
+  QUESTION_SOURCES,
+  QUESTION_SOURCE_COLOR,
   QUESTION_SOURCE_TEXT,
   QTYPES,
   Q_TYPE_COLOR,
@@ -22,6 +24,7 @@ import { stickyTableConfig } from '../utils/stickyTable'
 interface FilterForm {
   q_type?: QType
   difficulty?: Difficulty
+  source?: QuestionSource
   keyword?: string
 }
 
@@ -45,6 +48,7 @@ export default function QuestionBank() {
     size,
     q_type: filters.q_type,
     difficulty: filters.difficulty,
+    source: filters.source,
     keyword: filters.keyword?.trim() || undefined,
     review_status: reviewTab,
   })
@@ -117,7 +121,7 @@ export default function QuestionBank() {
       key: 'source',
       width: 100,
       render: (s: Question['source']) => (
-        <Tag color={s === 'llm' ? 'magenta' : 'default'}>{QUESTION_SOURCE_TEXT[s]}</Tag>
+        <Tag color={QUESTION_SOURCE_COLOR[s]}>{QUESTION_SOURCE_TEXT[s]}</Tag>
       ),
     },
     {
@@ -208,6 +212,17 @@ export default function QuestionBank() {
               allowClear
               style={{ width: 140 }}
               options={DIFFICULTIES.map((d) => ({ label: DIFFICULTY_TEXT[d], value: d }))}
+            />
+          </Form.Item>
+          <Form.Item name="source" label="来源">
+            <Select
+              placeholder="全部来源"
+              allowClear
+              style={{ width: 140 }}
+              options={QUESTION_SOURCES.map((s) => ({
+                label: QUESTION_SOURCE_TEXT[s],
+                value: s,
+              }))}
             />
           </Form.Item>
           <Form.Item name="keyword" label="关键词">

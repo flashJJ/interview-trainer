@@ -20,6 +20,7 @@ def questions_overview(db, user_id: int) -> dict:
     base = _questions_base(db, user_id)
     total = base.count()
     llm_count = base.filter(Question.source == "llm").count()
+    builtin_count = base.filter(Question.source == "builtin").count()
     pending_count = (
         db.query(Question)
         .filter(
@@ -68,7 +69,8 @@ def questions_overview(db, user_id: int) -> dict:
     return {
         "total": total,
         "llm_count": llm_count,
-        "rule_count": total - llm_count,
+        "rule_count": total - llm_count - builtin_count,
+        "builtin_count": builtin_count,
         "pending_count": pending_count,
         "answered_count": answered_count,
         "by_type": [{"key": k, "count": v} for k, v in type_map.items()],

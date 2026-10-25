@@ -199,6 +199,7 @@ def list_questions(
     difficulty: str = "",
     entry_id: int | None = None,
     keyword: str = "",
+    source: str = "",  # llm | rule | builtin | 空表示全部
     review_status: str = "approved",  # approved | pending | rejected | all
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -214,6 +215,8 @@ def list_questions(
         query = query.filter(Question.difficulty == difficulty)
     if entry_id is not None:
         query = query.filter(Question.entry_id == entry_id)
+    if source:
+        query = query.filter(Question.source == source)
     if keyword:
         query = query.filter(Question.content.like(f"%{keyword}%"))
     total = query.count()
@@ -236,6 +239,7 @@ def question_stats(
     pending = base.filter(Question.review_status == "pending").count()
     rejected = base.filter(Question.review_status == "rejected").count()
     llm_count = base.filter(Question.source == "llm").count()
+    builtin_count = base.filter(Question.source == "builtin").count()
     type_rows = (
         base.with_entities(Question.q_type, func.count(Question.id))
         .group_by(Question.q_type)
@@ -264,7 +268,8 @@ def question_stats(
         pending_count=pending,
         rejected_count=rejected,
         llm_count=llm_count,
-        rule_count=total - llm_count,
+        rule_count=total - llm_count - builtin_count,
+        builtin_count=builtin_count,
         by_type=by_type,
         by_difficulty=by_difficulty,
         by_entry=[
