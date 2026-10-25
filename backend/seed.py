@@ -3,6 +3,11 @@
 用法：
     python seed.py            # 写入演示数据（幂等，已存在 demo 用户则跳过）
     python seed.py --reset    # 清空数据库与向量库后重新播种
+    python seed.py --builtin  # 只补内置知识库与内置题库（幂等，不动已有数据）
+    python seed.py --ensure   # 只补 KNOWLEDGE_ENTRIES 中缺失的资料
+
+「开箱即用」的关键在内置内容：内置知识库语料 + 手写精选题库随仓库分发，
+不配置 LLM Key 也能拥有一套覆盖面完整、质量稳定的资料与题目。
 
 默认账号：demo / demo123
 """
@@ -100,20 +105,8 @@ Embedding 模型把文本映射为稠密向量，语义相近的文本向量距�
 
 RAG 的评估维度包括检索召回率、答案忠实度、答案相关性和端到端延迟。常见优化方向有查询改写、假设性文档嵌入、多路召回和自我反思纠错。""",
     ),
-    (
-        "Python 装饰器与上下文管理器",
-        """装饰器本质上是一个接收函数作为参数并返回新函数的可调用对象，利用闭包在不修改原函数代码的前提下增强函数行为，常用于日志、计时、权限校验和结果缓存。
-
-@ 语法糖等价于 func = decorator(func)。带参数的装饰器需要三层嵌套：最外层接收装饰器参数，中间层接收被装饰函数，最内层实现包装逻辑。functools.wraps 用于保留原函数的名称和文档字符串等元信息，避免调试困难。
-
-类装饰器和 functools.lru_cache 是标准库中的常见实践，lru_cache 自动缓存函数返回值，适合加速纯函数的重复计算。
-
-上下文管理器通过 with 语句在进入和退出时自动执行准备与清理动作，保证资源正确释放。实现方式有两种：定义 __enter__ 和 __exit__ 方法的类，或者用 contextlib.contextmanager 装饰生成器，yield 之前是进入逻辑，之后是退出逻辑。
-
-__exit__ 方法接收异常类型、异常值和追踪信息，返回 True 可以抑制异常。contextlib.suppress 可以简洁地忽略指定类型的异常。
-
-常见陷阱：装饰器内直接返回内层函数导致引用丢失；多个装饰器叠加时执行顺序是从下往上包装；闭包中循环变量的延迟绑定问题。""",
-    ),
+    # 注：「Python 装饰器与上下文管理器」「JVM 内存模型与垃圾回收」已并入内置语料
+    # （data/builtin/knowledge.py），不再在种子脚本里重复录入，避免同名内容冲突。
     (
         "HTTP 缓存与浏览器性能",
         """HTTP 缓存分为强缓存和协商缓存。强缓存由 Cache-Control 的 max-age 和 Expires 控制，命中时浏览器直接使用本地副本，不发请求；协商缓存由 ETag 配合 If-None-Match、Last-Modified 配合 If-Modified-Since 控制，命中时服务端返回 304，只节省响应体流量。
@@ -157,22 +150,6 @@ Promise.all 全部成功才成功、有一个失败就立即失败；Promise.all
 堆积处理：先定位是消费能力不足还是消费逻辑阻塞，短期可以扩容消费者并提高并发度，长期要优化慢查询、批量写入和下游依赖超时设置。死信队列用于收纳反复失败的消息，避免阻塞正常消费。
 
 分布式事务的常见方案：两阶段提交强一致但性能和可用性差；TCC 通过业务层的 Try、Confirm、Cancel 补偿；本地消息表把业务操作和消息写入放在同一个本地事务里，再由定时任务投递；事务消息由消息中间件保证半消息与本地事务的最终一致。""",
-    ),
-    (
-        "JVM 内存模型与垃圾回收",
-        """JVM 运行时内存分为线程私有的程序计数器、虚拟机栈、本地方法栈，以及线程共享的堆和方法区（JDK 8 之后由元空间实现）。
-
-堆是垃圾回收的主战场，通常分为新生代和老年代。新生代又分为 Eden 区和两个 Survivor 区，默认比例 8:1:1，对象优先在 Eden 分配，经过一次 Minor GC 存活的对象进入 Survivor 并增加年龄，年龄达到阈值晋升老年代。
-
-对象存活判定采用可达性分析，从 GC Roots 出发遍历引用链，不可达的对象才可回收。GC Roots 包括虚拟机栈中引用的对象、方法区静态属性引用的对象、常量引用的对象、本地方法栈中 JNI 引用的对象。
-
-引用类型分为强引用、软引用、弱引用、虚引用。软引用在内存不足时被回收，适合做缓存；弱引用在下一次 GC 时就被回收，常用于 ThreadLocal 的 key 和 WeakHashMap。
-
-垃圾回收算法包括标记清除、复制、标记整理、分代收集。新生代对象存活率低适合复制算法，老年代存活率高适合标记整理以避免内存碎片。
-
-常见收集器：Serial 单线程适合客户端场景；Parallel 关注吞吐量；CMS 关注低停顿但存在并发模式失败和内存碎片问题；G1 把堆划分为大小相等的 Region，按回收价值优先回收，可以设定目标停顿时间；ZGC 与 Shenandoah 通过染色指针和读屏障实现极低停顿。
-
-调优思路：先看 GC 日志确认是 Minor GC 频繁还是 Full GC 频繁，再结合堆内存占用、晋升速率和对象生命周期定位问题，避免盲目调大堆导致单次停顿更长。""",
     ),
     (
         "Linux 性能排查与容器化",
@@ -260,6 +237,18 @@ def seed() -> None:
             db.refresh(entry)
             entries.append(entry)
             print(f"[seed] 知识库「{title}」：{entry.chunk_count} 块，状态 {entry.status}")
+
+        # 1.5) 内置内容：补充内置知识库语料 + 手写精选题库（开箱即用的关键）
+        from app.services.builtin import load_builtin
+
+        stat = load_builtin(db, user.id)
+        print(
+            f"[seed] 内置知识库：新增 {stat['knowledge']['created']} 篇、"
+            f"跳过 {stat['knowledge']['skipped']} 篇；"
+            f"内置题库：新增 {stat['questions']['created']} 道、"
+            f"跳过 {stat['questions']['skipped']} 道"
+            + (f"（{stat['questions']['orphan']} 道未关联到条目）" if stat["questions"]["orphan"] else "")
+        )
 
         # 2) AI 出题（无 API Key 时为规则引擎模式）
         generator = QuestionGenerator(
@@ -410,10 +399,46 @@ def ensure_entries() -> None:
         db.close()
 
 
+def ensure_builtin() -> None:
+    """给已有用户补齐内置知识库与内置题库（--builtin 专用，幂等）。
+
+    用途：内置语料/题库扩充后，不必重建整库，只补缺失的部分。
+    内置题自动审核通过，可直接进入组卷池。
+    """
+    init_db()
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == DEMO_USERNAME).first()
+        if user is None:
+            print("[builtin] 演示用户不存在，请先运行 python seed.py")
+            return
+        from app.services.builtin import load_builtin
+
+        stat = load_builtin(db, user.id)
+        k, q = stat["knowledge"], stat["questions"]
+        print(
+            f"[builtin] 知识库 新增 {k['created']} / 跳过 {k['skipped']}；"
+            f"题库 新增 {q['created']} / 跳过 {q['skipped']}"
+            + (f"；未关联条目 {q['orphan']} 道" if q["orphan"] else "")
+        )
+        total_q = db.query(Question).filter(Question.user_id == user.id).count()
+        builtin_q = (
+            db.query(Question)
+            .filter(Question.user_id == user.id, Question.source == "builtin")
+            .count()
+        )
+        print(f"[builtin] 完成：题库共 {total_q} 道，其中内置 {builtin_q} 道")
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     if "--reset" in sys.argv:
         reset_all()
-    if "--ensure" in sys.argv:
+    if "--builtin" in sys.argv:
+        # 只补内置内容（知识库语料 + 精选题库），不动已有数据
+        ensure_builtin()
+    elif "--ensure" in sys.argv:
         ensure_entries()
     else:
         seed()

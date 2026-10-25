@@ -28,7 +28,8 @@ export interface LoginResp {
 
 // ===== 知识库 =====
 
-export type EntrySourceType = 'text' | 'file' | 'url'
+/** builtin = 系统自带语料（v1.7 起开箱即用） */
+export type EntrySourceType = 'text' | 'file' | 'url' | 'builtin'
 export type EntryStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
 /** 题目审核状态（v1.2 审核流）。 */
@@ -94,7 +95,8 @@ export interface KnowledgeOverview {
 
 export type QType = 'choice' | 'fill' | 'judge'
 export type Difficulty = 'easy' | 'medium' | 'hard'
-export type QuestionSource = 'llm' | 'rule'
+/** builtin = 系统精选内置题（v1.7 起开箱即用） */
+export type QuestionSource = 'llm' | 'rule' | 'builtin'
 
 export interface Question {
   id: number
@@ -145,6 +147,8 @@ export interface QuestionStatsOverview {
   rejected_count: number
   llm_count: number
   rule_count: number
+  /** v1.7：系统内置精选题数量 */
+  builtin_count?: number
   by_type: Record<string, number>
   by_difficulty: Record<string, number>
   by_entry: Array<{ entry_id: number; title: string; count: number }>
@@ -306,6 +310,8 @@ export interface QuestionsAnalyticsOverview {
   total: number
   llm_count: number
   rule_count: number
+  builtin_count: number
+  pending_count: number
   answered_count: number
   by_type: Array<{ key: string; count: number }>
   by_difficulty: Array<{ key: string; count: number }>

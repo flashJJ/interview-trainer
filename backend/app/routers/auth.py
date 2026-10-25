@@ -8,6 +8,7 @@ from ..dependencies import get_current_user
 from ..models import User
 from ..schemas import TokenOut, UserCreate, UserLogin, UserOut
 from ..security import create_access_token, hash_password, verify_password
+from ..services.builtin import load_builtin_async
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,6 +25,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    # 开箱即用：新用户后台补齐内置知识库与精选题库（不阻塞注册响应）
+    load_builtin_async(user.id)
     return user
 
 

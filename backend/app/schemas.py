@@ -195,6 +195,7 @@ class QuestionStatsOut(BaseModel):
     rejected_count: int
     llm_count: int
     rule_count: int
+    builtin_count: int = 0
     by_type: dict
     by_difficulty: dict
     by_entry: List[dict]
@@ -324,6 +325,7 @@ class QuestionsOverviewOut(BaseModel):
     total: int
     llm_count: int
     rule_count: int
+    builtin_count: int = 0
     pending_count: int
     answered_count: int
     by_type: List[KVItem]

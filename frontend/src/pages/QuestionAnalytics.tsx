@@ -105,13 +105,23 @@ export default function QuestionAnalytics() {
 
   return (
     <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={12} sm={8} lg={4}>
           <Card>
             <Statistic title="题目总量" value={overview?.total ?? 0} loading={loading} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={8} lg={4}>
+          <Card>
+            <Statistic
+              title="内置精选"
+              value={overview?.builtin_count ?? 0}
+              valueStyle={{ color: '#2f54eb' }}
+              loading={loading}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
           <Card>
             <Statistic
               title="AI 生成数"
@@ -121,7 +131,7 @@ export default function QuestionAnalytics() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={8} lg={4}>
           <Card>
             <Statistic
               title="规则生成数"
@@ -131,7 +141,17 @@ export default function QuestionAnalytics() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={8} lg={4}>
+          <Card>
+            <Statistic
+              title="待审核数"
+              value={overview?.pending_count ?? 0}
+              valueStyle={{ color: '#d46b08' }}
+              loading={loading}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
           <Card>
             <Statistic
               title="已有作答数"

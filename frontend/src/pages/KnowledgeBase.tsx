@@ -27,7 +27,7 @@ import GenerateQuestionsModal, {
   type GenForm,
 } from '@/components/knowledge/GenerateQuestionsModal'
 import { EntryStatusTag } from '@/components/common/StatusTags'
-import { fmtTime, SOURCE_TYPE_TEXT } from '@/utils/constants'
+import { fmtTime, SOURCE_TYPE_COLOR, SOURCE_TYPE_TEXT } from '@/utils/constants'
 import { stickyTableConfig } from '@/utils/stickyTable'
 
 export default function KnowledgeBase() {
@@ -206,7 +206,9 @@ export default function KnowledgeBase() {
       key: 'source_type',
       width: 80,
       render: (t: KnowledgeEntry['source_type']) => (
-        <Tag icon={t === 'file' ? <FileTextOutlined /> : undefined}>{SOURCE_TYPE_TEXT[t]}</Tag>
+        <Tag color={SOURCE_TYPE_COLOR[t]} icon={t === 'file' ? <FileTextOutlined /> : undefined}>
+          {SOURCE_TYPE_TEXT[t]}
+        </Tag>
       ),
     },
     {
