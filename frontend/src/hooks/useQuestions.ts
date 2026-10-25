@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { questionApi } from '@/api/questions'
 import { queryKeys } from '@/app/queryClient'
-import type { Difficulty, GenerateQuestionsReq, QType } from '@/api/types'
+import type { Difficulty, GenerateQuestionsReq, QuestionSource, QType } from '@/api/types'
 
-/** 题库列表（按审核状态/题型/难度/关键词筛选）。 */
+/** 题库列表（按审核状态/题型/难度/来源/关键词筛选）。 */
 export function useQuestions(params: {
   page?: number
   size?: number
@@ -11,6 +11,7 @@ export function useQuestions(params: {
   difficulty?: Difficulty | ''
   entry_id?: number
   keyword?: string
+  source?: QuestionSource | ''
   review_status?: 'approved' | 'pending' | 'rejected' | 'all'
 }) {
   return useQuery({

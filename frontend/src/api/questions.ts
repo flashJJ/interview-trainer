@@ -6,6 +6,7 @@ import type {
   PageResp,
   QType,
   Question,
+  QuestionSource,
   QuestionStatsOverview,
 } from './types'
 
@@ -17,6 +18,7 @@ export const questionApi = {
     difficulty?: Difficulty | ''
     entry_id?: number
     keyword?: string
+    source?: QuestionSource | ''
     review_status?: 'approved' | 'pending' | 'rejected' | 'all'
   }): Promise<PageResp<Question>> {
     try {

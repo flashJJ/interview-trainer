@@ -193,8 +193,11 @@ def main() -> None:
         paper_id = paper["id"]
         check("题目数量正确", paper["question_count"] == 6)
 
+        # 库存不足：限定到本次冒烟新建的资料（题目数远小于 100），应明确报错而不是静默截断
         resp = client.post(
-            "/exams/generate", json={"count": 100, "types": ["choice"]}, headers=headers
+            "/exams/generate",
+            json={"count": 100, "types": ["choice", "fill", "judge"], "entry_ids": [entry_id]},
+            headers=headers,
         )
         check("库存不足时明确报错", resp.status_code == 400 and "仅" in resp.json()["detail"], resp.text[:120])
 
@@ -597,9 +600,10 @@ def main() -> None:
         )
         check("定向卷标题含掌握度", "掌握度" in tp.get("title", ""), tp.get("title", ""))
 
+        # 库存不足：限定到本次冒烟新建的资料（题目数远小于 50），应明确报错而不是静默截断
         resp = client.post(
             "/exams/targeted",
-            json={"dim": "q_type", "key": "choice", "count": 50, "types": ["choice"]},
+            json={"dim": "entry", "key": str(entry_id), "count": 50},
             headers=headers,
         )
         check(
@@ -651,6 +655,47 @@ def main() -> None:
             "未聚焦时回退到全篇取材",
             resp.status_code == 200 and resp.json().get("retrieval", {}).get("used") is False,
             resp.text[:160],
+        )
+
+        # ---------- 7.8 内置内容（开箱即用） ----------
+        print("[7.8] 内置知识库与题库")
+        resp = client.get("/questions?source=builtin&size=1", headers=headers)
+        builtin_list = resp.json() if resp.status_code == 200 else {}
+        check(
+            "内置题可筛选",
+            resp.status_code == 200 and builtin_list.get("total", 0) >= 200,
+            f"total={builtin_list.get('total')}",
+        )
+        check(
+            "内置题自动过审且带来源标记",
+            builtin_list["items"]
+            and all(q["source"] == "builtin" for q in builtin_list["items"])
+            and all(q["review_status"] == "approved" for q in builtin_list["items"]),
+            str(builtin_list["items"][0].get("source")) if builtin_list.get("items") else "",
+        )
+        check(
+            "内置题都能关联到知识库条目",
+            all(q.get("entry_id") is not None for q in builtin_list.get("items", [])),
+            str(builtin_list.get("items"))[:160],
+        )
+
+        resp = client.get("/analytics/questions/overview", headers=headers)
+        ov2 = resp.json()
+        check(
+            "统计区分内置/规则/AI 三种来源",
+            ov2.get("builtin_count", 0) >= 200
+            and ov2["builtin_count"] + ov2["rule_count"] + ov2["llm_count"] == ov2["total"],
+            f"builtin={ov2.get('builtin_count')} rule={ov2.get('rule_count')} "
+            f"llm={ov2.get('llm_count')} total={ov2.get('total')}",
+        )
+
+        resp = client.get("/knowledge/entries?page=1&size=100", headers=headers)
+        entries = resp.json() if resp.status_code == 200 else {}
+        builtin_entries = [e for e in entries.get("items", []) if e["source_type"] == "builtin"]
+        check(
+            "内置知识库语料已就绪",
+            len(builtin_entries) >= 15 and all(e["chunk_count"] > 0 for e in builtin_entries),
+            f"内置资料 {len(builtin_entries)} 篇",
         )
 
         # ---------- 8. 边界与错误处理 ----------

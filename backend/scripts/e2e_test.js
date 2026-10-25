@@ -50,10 +50,11 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/02-knowledge.png` });
 
-  await step('知识库列表渲染（种子资料可见）', async () => {
-    await page.getByText('Redis 核心知识笔记').waitFor({ timeout: 10000 });
-    await page.getByText('RAG 检索增强生成基础').waitFor({ timeout: 5000 });
-    // 资料条数随 seed 扩充变化，这里只校验至少 8 条而非写死数字
+  await step('知识库列表渲染（内置语料与种子资料可见）', async () => {
+    // 列表默认按 id 倒序，首页是后载入的内置语料
+    await page.getByText('向量检索与 Embedding 工程实践').first().waitFor({ timeout: 10000 });
+    await page.getByText('AI 应用评测：指标、评测集与回归').first().waitFor({ timeout: 5000 });
+    // 资料条数随内置语料扩充变化，这里只校验至少 8 条而非写死数字
     const rowCount = await page.locator('.ant-table-tbody tr').count();
     if (rowCount < 8) throw new Error(`知识库表格行数异常：${rowCount}`);
   });
@@ -80,8 +81,9 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
 
   await step('出题审核流（知识库出题 -> 待审核 -> 通过入池）', async () => {
     // 1. 知识库页对第一条资料 AI 出题（默认全题型，每题型 2 道）
+    // 不写死标题：列表顺序会随内置语料扩充变化，取首行即可
     await menuClick(/知\s*识\s*库/);
-    await page.getByText('Redis 核心知识笔记').first().waitFor({ timeout: 10000 });
+    await page.locator('.ant-table-tbody tr:has(td)').first().waitFor({ timeout: 10000 });
     const firstRow = page.locator('.ant-table-tbody tr:has(td)').first();
     await firstRow.getByRole('button', { name: /AI\s*出\s*题/ }).click();
     const genModal = page.getByRole('dialog');
@@ -313,6 +315,31 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await page.waitForTimeout(1200);
   });
   await page.screenshot({ path: `${OUT}/14-targeted-exam.png`, fullPage: true });
+
+  await step('内置内容开箱即用（题库来源筛选 + 知识库内置徽标）', async () => {
+    // 1. 题库页按来源筛选「内置精选」，确认徽标与题量
+    await menuClick(/题\s*库/);
+    await page.locator('table').first().waitFor({ timeout: 10000 });
+    const sourceSelect = page
+      .locator('.ant-form-item')
+      .filter({ hasText: '来源' })
+      .locator('.ant-select');
+    await sourceSelect.click();
+    await page.locator('.ant-select-item-option', { hasText: '内置精选' }).first().click();
+    await page.getByRole('button', { name: /搜\s*索/ }).click();
+    await page.waitForTimeout(1500);
+    const builtinTags = await page.locator('.ant-tag', { hasText: '内置精选' }).count();
+    if (builtinTags === 0) throw new Error('题库未出现「内置精选」来源徽标');
+    await page.screenshot({ path: `${OUT}/15-builtin-questions.png`, fullPage: true });
+
+    // 2. 知识库页确认内置语料带「内置」徽标
+    await menuClick(/知\s*识\s*库/);
+    await page.locator('table').first().waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+    const entryTags = await page.locator('.ant-tag', { hasText: /^内置$/ }).count();
+    if (entryTags === 0) throw new Error('知识库未出现「内置」来源徽标');
+    await page.screenshot({ path: `${OUT}/16-builtin-knowledge.png`, fullPage: true });
+  });
 
   await browser.close();
 

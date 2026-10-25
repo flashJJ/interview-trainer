@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import commit_with_retry, get_db
 from ..dependencies import get_current_user
 from ..models import KnowledgeEntry, KnowledgeChunk, Question, User
 from ..schemas import (
@@ -63,7 +63,8 @@ def _create_and_process(db: Session, user: User, title: str, content: str, sourc
         char_count=len(content),
     )
     db.add(entry)
-    db.commit()
+    # 后台可能在给新用户灌内置内容，写锁被短暂占用时用退避重试顶过去
+    commit_with_retry(db)
     db.refresh(entry)
     process_entry(db, entry)
     db.refresh(entry)
