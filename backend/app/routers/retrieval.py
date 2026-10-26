@@ -216,6 +216,25 @@ def auto_build(
     return AutoBuildOut(created=created, skipped=skipped, total_cases=total)
 
 
+@router.post("/cases/builtin", response_model=AutoBuildOut)
+def load_builtin_cases(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """幂等载入内置评测用例（开箱即用）。新用户注册时已自动载入；
+    已清空用例或老用户可手动补齐。返回 (created/skipped/total)。"""
+    from ..services.builtin import load_builtin_eval_cases
+
+    stat = load_builtin_eval_cases(db, current_user.id)
+    total = (
+        db.query(RetrievalEvalCase)
+        .filter(RetrievalEvalCase.user_id == current_user.id)
+        .count()
+    )
+    return AutoBuildOut(
+        created=stat["created"], skipped=stat["skipped"], total_cases=int(total)
+    )
+
+
 @router.post("/run", response_model=EvalRunOut)
 def run_eval(
     payload: EvalRunIn,

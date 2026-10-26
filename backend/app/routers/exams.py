@@ -28,7 +28,7 @@ from ..schemas import (
     SubmitExamOut,
     TargetedExamIn,
 )
-from ..services import mastery as mastery_service
+from ..services import exam_service, mastery as mastery_service
 from ..services.grader import Grader, grade_and_submit_session
 from ..services.runtime import get_embeddings, get_llm
 
@@ -41,6 +41,14 @@ def _auto_title(questions: list[Question]) -> str:
     dist = Counter(q.q_type for q in questions)
     parts = [f"{_TYPE_NAME.get(t, t)}×{c}" for t, c in dist.items() if c]
     return f"随机考卷 · {len(questions)} 题（{' '.join(parts)}）"
+
+
+def _adaptive_title(questions: list[Question], blueprint: str, mix: dict[str, int]) -> str:
+    bp_text = exam_service.BLUEPRINT_TEXT.get(blueprint, blueprint)
+    mix_str = " / ".join(
+        f"{exam_service.DIFFICULTY_SHORT[d]}{mix[d]}" for d in ("easy", "medium", "hard") if mix.get(d)
+    )
+    return f"自适应考卷 · {bp_text} ×{len(questions)}（{mix_str}）"
 
 
 def _exam_question(question: Question) -> ExamQuestionOut:
@@ -92,32 +100,59 @@ def generate_exam(
         Question.review_status == "approved",  # 组卷只从已审核题目抽取
         Question.q_type.in_(payload.types),
     )
-    if payload.difficulty:
-        query = query.filter(Question.difficulty == payload.difficulty)
     if payload.entry_ids:
         query = query.filter(Question.entry_id.in_(payload.entry_ids))
 
-    available = query.count()
-    if available < payload.count:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"符合条件的题目仅 {available} 道，请减少数量或放宽筛选条件",
+    # 三种组卷模式（优先级：指定单一难度 > 难度蓝图 > 纯随机）
+    if payload.difficulty:
+        query = query.filter(Question.difficulty == payload.difficulty)
+        available = query.count()
+        if available < payload.count:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"符合条件的题目仅 {available} 道，请减少数量或放宽筛选条件",
+            )
+        all_ids = [row[0] for row in query.with_entities(Question.id).all()]
+        chosen_ids = random.sample(all_ids, payload.count)
+        questions = db.query(Question).filter(Question.id.in_(chosen_ids)).all()
+        random.shuffle(questions)
+        mode = "single"
+        mix = {payload.difficulty: payload.count}
+        title = payload.title.strip() or _auto_title(questions)
+    elif payload.blueprint:
+        questions, actual = exam_service.adaptive_questions(
+            db, current_user.id, payload.count, payload.types, payload.blueprint, payload.entry_ids
         )
-
-    all_ids = [row[0] for row in query.with_entities(Question.id).all()]
-    chosen_ids = random.sample(all_ids, payload.count)
-    questions = db.query(Question).filter(Question.id.in_(chosen_ids)).all()
-    random.shuffle(questions)
+        mode = "adaptive"
+        mix = actual
+        title = payload.title.strip() or _adaptive_title(questions, payload.blueprint, actual)
+    else:
+        available = query.count()
+        if available < payload.count:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"符合条件的题目仅 {available} 道，请减少数量或放宽筛选条件",
+            )
+        all_ids = [row[0] for row in query.with_entities(Question.id).all()]
+        chosen_ids = random.sample(all_ids, payload.count)
+        questions = db.query(Question).filter(Question.id.in_(chosen_ids)).all()
+        random.shuffle(questions)
+        mode = "random"
+        mix = {}
+        title = payload.title.strip() or _auto_title(questions)
 
     paper = ExamPaper(
         user_id=current_user.id,
-        title=payload.title.strip() or _auto_title(questions),
+        title=title,
         question_count=len(questions),
         config=json.dumps(
             {
                 "count": payload.count,
                 "types": payload.types,
                 "difficulty": payload.difficulty,
+                "blueprint": payload.blueprint,
+                "mode": mode,
+                "actual_mix": mix,
                 "entry_ids": payload.entry_ids,
             },
             ensure_ascii=False,

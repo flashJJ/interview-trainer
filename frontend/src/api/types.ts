@@ -165,6 +165,9 @@ export interface ExamPaper {
     types: QType[]
     difficulty: Difficulty | null
     entry_ids: number[] | null
+    mode?: string
+    blueprint?: string | null
+    actual_mix?: Record<string, number>
   }
   created_at: string
   latest_session: {

@@ -21,6 +21,7 @@ interface GenForm {
   count: number
   types: QType[]
   difficulty?: Difficulty
+  blueprint?: string
 }
 
 export default function Practice() {
@@ -30,6 +31,7 @@ export default function Practice() {
   const [size, setSize] = useState(10)
 
   const [genForm] = Form.useForm<GenForm>()
+  const blueprint = Form.useWatch('blueprint', genForm)
 
   // 数据层：TanStack Query 统一管理
   const { data: paperData, isLoading: loading } = useExamPapers(page, size)
@@ -48,7 +50,8 @@ export default function Practice() {
         title: values.title?.trim() || undefined,
         count: values.count,
         types: values.types,
-        difficulty: values.difficulty,
+        difficulty: values.blueprint ? undefined : values.difficulty,
+        blueprint: values.blueprint || undefined,
       })
       message.success(`考卷「${paper.title}」生成成功，共 ${paper.question_count} 题`)
       navigate(`/exam/${paper.id}`)
@@ -146,7 +149,24 @@ export default function Practice() {
             <Select
               placeholder="不限"
               allowClear
+              disabled={!!blueprint}
               options={DIFFICULTIES.map((d) => ({ label: DIFFICULTY_TEXT[d], value: d }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="blueprint"
+            label="难度蓝图（自适应组卷）"
+            tooltip="按预设难度比例分配题量：入门偏易、夯实中等偏上（推荐）、均衡、冲刺偏难。与上方「难度」互斥，二选一。"
+          >
+            <Select
+              placeholder="不限（纯随机）"
+              allowClear
+              options={[
+                { label: '入门（易 6 / 中 3 / 难 1）', value: 'intro' },
+                { label: '夯实（易 2 / 中 5.5 / 难 2.5）', value: 'consolidate' },
+                { label: '均衡（约 1 / 1 / 1）', value: 'balanced' },
+                { label: '冲刺（易 1 / 中 3 / 难 6）', value: 'sprint' },
+              ]}
             />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>

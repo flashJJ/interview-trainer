@@ -63,6 +63,11 @@ export function useEvalMutations() {
     onSuccess: invalidateAll,
   })
 
+  const loadBuiltinCases = useMutation({
+    mutationFn: () => retrievalApi.loadBuiltinCases(),
+    onSuccess: invalidateAll,
+  })
+
   const run = useMutation({
     mutationFn: (payload: {
       top_k: number
@@ -73,5 +78,5 @@ export function useEvalMutations() {
     onSuccess: invalidateAll,
   })
 
-  return { autoBuild, createCase, deleteCase, clearCases, run }
+  return { autoBuild, createCase, deleteCase, clearCases, loadBuiltinCases, run }
 }

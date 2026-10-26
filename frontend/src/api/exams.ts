@@ -17,6 +17,7 @@ export const examApi = {
     count: number
     types: QType[]
     difficulty?: string
+    blueprint?: string
   }): Promise<ExamPaper> {
     try {
       const { data } = await http.post<ExamPaper>('/exams/generate', params)

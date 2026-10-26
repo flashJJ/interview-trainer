@@ -59,6 +59,13 @@ const MODE_LABEL: Record<string, string> = {
   'hybrid+rewrite': '混合+改写',
 }
 
+/** 评测用例来源标签：内置（随系统分发，开箱即用）/ 手工 / 自动生成 */
+const CASE_SOURCE_META: Record<string, { text: string; color: string }> = {
+  builtin: { text: '内置', color: 'gold' },
+  manual: { text: '手工', color: 'green' },
+  auto: { text: '自动', color: 'default' },
+}
+
 const SEARCH_LIMIT = 200
 
 export default function RetrievalReport() {
@@ -66,7 +73,7 @@ export default function RetrievalReport() {
   const overview = useEvalOverview()
   const cases = useEvalCases()
   const runs = useEvalRuns(10)
-  const { autoBuild, createCase, deleteCase, clearCases, run } = useEvalMutations()
+  const { autoBuild, createCase, deleteCase, clearCases, loadBuiltinCases, run } = useEvalMutations()
 
   const [buildForm] = Form.useForm<{ count: number; use_llm: boolean }>()
   const [runForm] = Form.useForm<{
@@ -156,6 +163,19 @@ export default function RetrievalReport() {
         message.warning(`没有新增用例（跳过 ${res.skipped} 条），知识块可能已用完`)
       } else {
         message.success(`已生成 ${res.created} 条（跳过 ${res.skipped}），共 ${res.total_cases} 条`)
+      }
+    } catch (err) {
+      if (err instanceof Error) message.error(err.message)
+    }
+  }
+
+  const onLoadBuiltin = async () => {
+    try {
+      const res = await loadBuiltinCases.mutateAsync()
+      if (res.created === 0) {
+        message.info(`内置评测用例已存在（共 ${res.total_cases} 条），无需重复载入`)
+      } else {
+        message.success(`已载入 ${res.created} 条内置评测用例，共 ${res.total_cases} 条，可直接运行评测`)
       }
     } catch (err) {
       if (err instanceof Error) message.error(err.message)
@@ -286,9 +306,10 @@ export default function RetrievalReport() {
       dataIndex: 'source',
       key: 'source',
       width: 90,
-      render: (v: string) => (
-        <Tag color={v === 'manual' ? 'green' : 'default'}>{v === 'manual' ? '手工' : '自动'}</Tag>
-      ),
+      render: (v: string) => {
+        const m = CASE_SOURCE_META[v] ?? { text: v, color: 'default' }
+        return <Tag color={m.color}>{m.text}</Tag>
+      },
     },
     {
       title: '操作',
@@ -428,6 +449,13 @@ export default function RetrievalReport() {
                     }}
                   >
                     手工新增
+                  </Button>
+                  <Button
+                    icon={<ExperimentOutlined />}
+                    loading={loadBuiltinCases.isPending}
+                    onClick={() => void onLoadBuiltin()}
+                  >
+                    载入内置用例
                   </Button>
                 </Space>
               </Form.Item>

@@ -341,6 +341,92 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
     await page.screenshot({ path: `${OUT}/16-builtin-knowledge.png`, fullPage: true });
   });
 
+  await step('难度蓝图自适应组卷（选「夯实」→ 生成 → 校验模式/比例）', async () => {
+    await menuClick(/做\s*题\s*训\s*练/);
+    await page.getByText('生成随机考卷').waitFor({ timeout: 10000 });
+    const card = page.locator('.ant-card:has-text("生成随机考卷")');
+
+    // 选难度蓝图 = 夯实（与「难度」互斥，选蓝图后难度应被禁用）
+    const bpSelect = card
+      .locator('.ant-form-item')
+      .filter({ hasText: '难度蓝图' })
+      .locator('.ant-select');
+    await bpSelect.click();
+    await page.locator('.ant-select-item-option', { hasText: '夯实' }).first().click();
+    await page.waitForTimeout(300);
+
+    // 题量设 10（蓝图按比例分配：易2 / 中6 / 难2）
+    await card.locator('.ant-input-number-input').fill('10');
+    await card.getByRole('button', { name: /生\s*成\s*考\s*卷\s*并\s*开\s*始/ }).click();
+    await page.waitForURL('**/exam/**', { timeout: 15000 });
+
+    // 通过 API 校验 config.mode=adaptive，actual_mix 之和等于题量，且蓝图名进入标题
+    // 注意：/exams/{paper_id} 返回 { paper: {...} }，config 在 paper 下
+    const paperId = page.url().split('/exam/')[1];
+    const detail = await page.evaluate(async (pid) => {
+      const token = localStorage.getItem('it_token');
+      const resp = await fetch(`/api/exams/${pid}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return resp.json();
+    }, paperId);
+    const paper = detail.paper ?? detail;
+    const config = paper.config ?? {};
+    if (config.mode !== 'adaptive') {
+      throw new Error(`难度蓝图组卷 mode 应为 adaptive，实际为 ${config.mode}`);
+    }
+    const mix = config.actual_mix ?? {};
+    const mixSum = Object.values(mix).reduce((a, b) => a + b, 0);
+    if (mixSum !== paper.question_count) {
+      throw new Error(`actual_mix 之和 ${mixSum} 与题量 ${paper.question_count} 不一致（不应静默凑数）`);
+    }
+    // 夯实蓝图应以中等难度为主（中等题量 ≥ 易 且 ≥ 难）
+    if (!((mix.medium ?? 0) >= (mix.easy ?? 0) && (mix.medium ?? 0) >= (mix.hard ?? 0))) {
+      throw new Error(`夯实蓝图应中等难度最多，实际 mix=${JSON.stringify(mix)}`);
+    }
+    if (!paper.title.includes('自适应考卷') || !paper.title.includes('夯实')) {
+      throw new Error(`标题未体现自适应/蓝图名：${paper.title}`);
+    }
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: `${OUT}/17-blueprint-exam.png`, fullPage: true });
+  });
+
+  await step('内置评测用例开箱即用（载入内置用例 → 校验数量/来源 → 运行评测出报告）', async () => {
+    await menuClick(/检\s*索\s*评\s*测/);
+    await page.getByText('检索评测').first().waitFor({ timeout: 10000 });
+
+    // 点「载入内置用例」（幂等：已存在则 created=0，仍应无报错）
+    await page.getByRole('button', { name: /载\s*入\s*内\s*置\s*用\s*例/ }).click();
+    await page.waitForTimeout(2500);
+
+    // 来源标签「内置」应出现（确认来源标记渲染）；评测集表格默认分页 10 行，
+    // 故「总数 ≥18」改读顶部「评测用例」统计卡（不受分页影响）
+    const builtinTagVisible = await page.locator('.ant-tag', { hasText: /^内置$/ }).first().count();
+    if (builtinTagVisible === 0) throw new Error('评测集未出现「内置」来源标签');
+    const caseTotal = Number(
+      (await page
+        .locator('.ant-statistic')
+        .filter({ hasText: '评测用例' })
+        .locator('.ant-statistic-content-value')
+        .textContent()
+        .catch(() => '0')) ?? '0',
+    );
+    if (caseTotal < 18) {
+      throw new Error(`内置评测用例不足 18 条：实际 ${caseTotal}`);
+    }
+    await page.screenshot({ path: `${OUT}/18-builtin-eval.png`, fullPage: true });
+
+    // 点「运行评测」，等待「指标对比」卡片渲染图表（最多 60s）
+    await page.getByRole('button', { name: /运\s*行\s*评\s*测/ }).click();
+    await page
+      .locator('.ant-card')
+      .filter({ hasText: '指标对比' })
+      .locator('canvas')
+      .first()
+      .waitFor({ timeout: 60000 });
+    await page.waitForTimeout(1000);
+  });
+
   await browser.close();
 
   console.log(report.join('\n'));
