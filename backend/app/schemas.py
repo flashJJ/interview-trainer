@@ -206,7 +206,8 @@ class GenerateExamIn(BaseModel):
     title: str = ""
     count: int = Field(default=10, ge=1, le=100)
     types: List[str] = Field(default=["choice", "fill", "judge"])
-    difficulty: Optional[str] = None
+    difficulty: Optional[str] = None  # 指定单一难度（优先于 blueprint）
+    blueprint: Optional[str] = None  # 难度蓝图：intro/consolidate/balanced/sprint（自适应组卷）
     entry_ids: Optional[List[int]] = None
 
 

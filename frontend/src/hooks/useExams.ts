@@ -42,8 +42,13 @@ export function useExamMutations() {
   const queryClient = useQueryClient()
 
   const generate = useMutation({
-    mutationFn: (params: { title?: string; count: number; types: QType[]; difficulty?: string }) =>
-      examApi.generate(params),
+    mutationFn: (params: {
+      title?: string
+      count: number
+      types: QType[]
+      difficulty?: string
+      blueprint?: string
+    }) => examApi.generate(params),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.exams.all }),
   })
 

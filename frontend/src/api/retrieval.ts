@@ -55,6 +55,17 @@ export const retrievalApi = {
     }
   },
 
+  async loadBuiltinCases(): Promise<{ created: number; skipped: number; total_cases: number }> {
+    try {
+      const { data } = await http.post<{ created: number; skipped: number; total_cases: number }>(
+        '/retrieval/cases/builtin',
+      )
+      return data
+    } catch (err) {
+      throw new Error(errMsg(err, '载入内置评测用例失败'))
+    }
+  },
+
   async autoBuild(
     count: number,
     useLlm: boolean,

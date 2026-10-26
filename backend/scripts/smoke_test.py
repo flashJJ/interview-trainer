@@ -698,6 +698,45 @@ def main() -> None:
             f"内置资料 {len(builtin_entries)} 篇",
         )
 
+        # ---------- 7.9 内置评测用例（开箱即用） ----------
+        print("[7.9] 内置检索评测用例")
+        # 前面的检索评测段会清空用例，这里幂等载入内置用例，确保开箱即用
+        resp = client.post("/retrieval/cases/builtin", headers=headers)
+        bj = resp.json() if resp.status_code == 200 else {}
+        check(
+            "内置评测用例可载入",
+            resp.status_code == 200 and bj.get("total_cases", 0) >= 18,
+            str(bj) if resp.status_code == 200 else resp.text,
+        )
+        resp = client.get("/retrieval/cases?size=200", headers=headers)
+        cases = resp.json() if resp.status_code == 200 else []
+        builtin_cases = [c for c in cases if c.get("source") == "builtin"]
+        check(
+            "存在内置来源评测用例",
+            len(builtin_cases) >= 18,
+            f"builtin={len(builtin_cases)} total={len(cases)}",
+        )
+        # 幂等：再调一次不应新增
+        resp2 = client.post("/retrieval/cases/builtin", headers=headers)
+        bj2 = resp2.json() if resp2.status_code == 200 else {}
+        check(
+            "内置评测用例幂等（不重复）",
+            resp2.status_code == 200 and bj2.get("created", 0) == 0,
+            str(bj2) if resp2.status_code == 200 else resp2.text,
+        )
+        # 开箱即能跑出量化报告
+        resp = client.post(
+            "/retrieval/run",
+            json={"top_k": 5, "use_rewrite": True, "vector_weight": 1.0},
+            headers=headers,
+        )
+        run_json = resp.json() if resp.status_code == 200 else {}
+        check(
+            "内置用例可运行检索评测",
+            resp.status_code == 200 and "hybrid" in run_json.get("summary", {}),
+            str(run_json.get("summary"))[:160],
+        )
+
         # ---------- 8. 边界与错误处理 ----------
         print("[8] 边界与错误处理")
         resp = client.post("/knowledge/entries", json={"title": "x", "content": "太短"}, headers=headers)

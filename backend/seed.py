@@ -415,7 +415,7 @@ def ensure_builtin() -> None:
         from app.services.builtin import load_builtin
 
         stat = load_builtin(db, user.id)
-        k, q = stat["knowledge"], stat["questions"]
+        k, q, e = stat["knowledge"], stat["questions"], stat["eval_cases"]
         print(
             f"[builtin] 知识库 新增 {k['created']} / 跳过 {k['skipped']}；"
             f"题库 新增 {q['created']} / 跳过 {q['skipped']}"
@@ -428,6 +428,10 @@ def ensure_builtin() -> None:
             .count()
         )
         print(f"[builtin] 完成：题库共 {total_q} 道，其中内置 {builtin_q} 道")
+        print(
+            f"[builtin] 评测用例 新增 {e['created']} / 跳过 {e['skipped']}"
+            + (f"；未匹配条目 {e['orphan']} 条" if e["orphan"] else "")
+        )
     finally:
         db.close()
 

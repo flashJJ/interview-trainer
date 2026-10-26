@@ -27,7 +27,7 @@ _COMMIT_BATCH = 20
 _LOAD_PACE_SEC = 0.05
 
 from ..database import commit_with_retry
-from ..models import KnowledgeEntry, Question
+from ..models import KnowledgeChunk, KnowledgeEntry, Question, RetrievalEvalCase
 from .pipeline import process_entry
 from .runtime import get_embeddings, get_vector_store
 
@@ -184,7 +184,74 @@ def load_builtin(db, user_id: int, log: Callable[[str], None] = print) -> dict:
     """按顺序载入内置知识库与题库（题库必须后于知识库，才能关联到条目）。"""
     knowledge_stat = load_builtin_knowledge(db, user_id, log)
     question_stat = load_builtin_questions(db, user_id, log)
-    return {"knowledge": knowledge_stat, "questions": question_stat}
+    eval_stat = load_builtin_eval_cases(db, user_id, log)
+    return {"knowledge": knowledge_stat, "questions": question_stat, "eval_cases": eval_stat}
+
+
+def load_builtin_eval_cases(
+    db, user_id: int, log: Callable[[str], None] = print
+) -> dict:
+    """载入内置检索评测用例（query → 条目知识块），返回统计。
+
+    用例按 (user_id, query) 幂等去重；条目标题解析到该用户内置条目的全部知识块 id，
+    作为评测的 expected_ids。条目找不到或没有知识块时跳过并记日志（正常不触发，
+    因为 19 篇内置语料在 load_builtin_knowledge 阶段已分块）。
+    """
+    from data.builtin import eval_cases
+
+    specs = list(eval_cases.BUILTIN_EVAL_CASES)
+    # 标题 -> entry_id，以及 entry_id -> 该条目全部知识块 id
+    entry_rows = (
+        db.query(KnowledgeEntry.id, KnowledgeEntry.title)
+        .filter(KnowledgeEntry.user_id == user_id)
+        .all()
+    )
+    title_to_entry = {title: eid for eid, title in entry_rows}
+    chunk_rows = (
+        db.query(KnowledgeChunk.entry_id, KnowledgeChunk.id)
+        .filter(KnowledgeChunk.entry_id.in_(list(title_to_entry.values())))
+        .all()
+    )
+    chunks_by_entry: dict[int, list[int]] = {}
+    for eid, cid in chunk_rows:
+        chunks_by_entry.setdefault(int(eid), []).append(int(cid))
+
+    created = skipped = orphan = 0
+    for spec in specs:
+        title = spec["entry"]
+        eid = title_to_entry.get(title)
+        if eid is None:
+            orphan += 1
+            log(f"[builtin-eval] 找不到条目「{title}」，跳过")
+            continue
+        chunk_ids = chunks_by_entry.get(int(eid), [])
+        if not chunk_ids:
+            orphan += 1
+            log(f"[builtin-eval] 条目「{title}」尚未分块，跳过")
+            continue
+        query_text = spec["query"].strip()
+        dup = (
+            db.query(RetrievalEvalCase)
+            .filter(RetrievalEvalCase.user_id == user_id, RetrievalEvalCase.query == query_text)
+            .first()
+        )
+        if dup is not None:
+            skipped += 1
+            continue
+        db.add(
+            RetrievalEvalCase(
+                user_id=user_id,
+                query=query_text,
+                expected_ids_json=json.dumps(chunk_ids, ensure_ascii=False),
+                source="builtin",
+                origin_chunk_id=0,
+                note="内置预置",
+            )
+        )
+        created += 1
+    if created:
+        commit_with_retry(db)
+    return {"created": created, "skipped": skipped, "orphan": orphan}
 
 
 def load_builtin_async(user_id: int) -> threading.Thread:
