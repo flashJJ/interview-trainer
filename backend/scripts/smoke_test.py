@@ -24,7 +24,8 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 
 def main() -> None:
-    with httpx.Client(base_url=BASE, timeout=60, trust_env=False) as client:
+    # 全局 180s：演示模式瞬间返回；配置真实 LLM 后，单次出题/讲题可能要 1–2 分钟
+    with httpx.Client(base_url=BASE, timeout=180, trust_env=False) as client:
         # ---------- 1. 认证 ----------
         print("[1] 认证")
         # 每次运行使用独立用户：出题去重按用户隔离，保证测试可重复执行
