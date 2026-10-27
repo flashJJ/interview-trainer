@@ -35,6 +35,19 @@ SYSTEM_PROMPT = (
 
 _FILL_BLANK_RE = re.compile(r"_{3,}|（\s*）|\(\s*\)")
 _LETTER_RE = re.compile(r"^\s*([A-Da-d])\s*[.、:：]?")
+# 只剥离「明确带标点/括号」的前缀：A. / A、/ A．/ A: / (A) / （A）
+# 不加这个约束的话，"API 网关……" 会被误砍成 "PI 网关……"
+_OPTION_PREFIX_RE = re.compile(r"^\s*(?:[\(（]\s*[A-Da-d]\s*[\)）]|[A-Da-d]\s*[.、．:：])\s*")
+
+
+def _clean_option_text(text: str) -> str:
+    """去掉模型自带的选择项前缀，可能套了不止一层（见过 "A. A. xxx"）。"""
+    value = str(text).strip()
+    while True:
+        stripped = _OPTION_PREFIX_RE.sub("", value, count=1).strip()
+        if stripped == value:
+            return value
+        value = stripped
 
 
 @dataclass
@@ -169,9 +182,10 @@ class QuestionGenerator:
         )
         schemas = {
             "choice": (
-                "4. 提供 4 个选项（A/B/C/D），有且仅有 1 个正确选项，其余为合理干扰项\n"
+                "4. 提供 4 个选项（A/B/C/D），有且仅有 1 个正确选项，其余为合理干扰项；"
+                "options 数组里只写选项正文，不要带 A/B/C/D 前缀\n"
                 "只输出 JSON：{\"q_type\": \"choice\", \"content\": \"题干\", "
-                "\"options\": [\"A. 选项1\", \"B. 选项2\", \"C. 选项3\", \"D. 选项4\"], "
+                "\"options\": [\"选项1正文\", \"选项2正文\", \"选项3正文\", \"选项4正文\"], "
                 "\"answer\": \"A\", \"explanation\": \"解析\", \"difficulty\": \"medium\", "
                 "\"keywords\": [\"关键词1\", \"关键词2\"]}"
             ),
@@ -250,8 +264,7 @@ class QuestionGenerator:
                 return None
             cleaned = []
             for opt in raw_options:
-                opt = str(opt).strip()
-                opt = re.sub(r"^[A-Da-d]\s*[.、:：]\s*", "", opt)
+                opt = _clean_option_text(opt)
                 if not opt:
                     return None
                 cleaned.append(opt)
