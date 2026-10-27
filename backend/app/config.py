@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     app_name: str = "面试题录入训练系统"
     api_prefix: str = "/api"
+    # development：占位密钥只告警；production：占位密钥直接拒绝启动
+    app_env: str = "development"
 
     # 关系数据库（默认 SQLite 零部署；换 PostgreSQL 改这一项即可）
     database_url: str = "sqlite:///./data/interview_trainer.db"
@@ -56,6 +58,44 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# ---------------------------------------------------------------- 启动安全校验
+# 代码默认值 + .env.example 里的示例值：两者都是「没配」，必须一起拦
+PLACEHOLDER_JWT_SECRETS = frozenset(
+    {
+        "change-me-in-production-use-a-long-random-secret-string",
+        "please-change-me-in-production",
+    }
+)
+JWT_SECRET_MIN_LENGTH = 32
+
+
+def is_placeholder_jwt_secret(secret: str) -> bool:
+    """占位值或长度不足的密钥一律视为未配置。"""
+    value = (secret or "").strip()
+    return value in PLACEHOLDER_JWT_SECRETS or len(value) < JWT_SECRET_MIN_LENGTH
+
+
+def assert_jwt_secret(settings: Settings) -> None:
+    """生产环境用占位密钥直接拒绝启动，开发环境只告警。
+
+    占位密钥是公开的：任何人都能伪造 Token 冒充任意用户，因此生产环境
+    必须 fail-fast，而不是依赖部署者记得改。
+    """
+    if not is_placeholder_jwt_secret(settings.jwt_secret):
+        return
+
+    message = (
+        f"JWT_SECRET 仍为占位值或长度不足 {JWT_SECRET_MIN_LENGTH} 位，"
+        "签发的 Token 可被伪造"
+    )
+    if settings.app_env.strip().lower() in {"production", "prod"}:
+        raise RuntimeError(
+            f"{message}；APP_ENV=production 拒绝启动。"
+            "请用 `python -c \"import secrets;print(secrets.token_urlsafe(48))\"` 生成后写入 .env"
+        )
+    print(f"[warn] {message}（开发环境放行；生产请设 APP_ENV=production）")
 
 
 # ---------------------------------------------------------------- 运行时生效配置

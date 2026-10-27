@@ -1,0 +1,23 @@
+# 依赖与缓存
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 测试与推送脚本不进运行镜像
+tests/
+conftest.py
+pytest.ini
+scripts/
+
+# 运行时数据（注意：data/builtin 是交付物，必须保留）
+data/chroma/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# 本机配置
+.env
+.env.*

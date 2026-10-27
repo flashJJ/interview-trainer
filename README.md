@@ -60,6 +60,28 @@ npm run dev        # 默认 5173 端口，/api 已代理到 8000
 > 自己录资料出题时，没有 Key 走演示模式（内置规则引擎），题目显示「规则生成」徽标；
 > 配置 Key 后同一份代码切换为「AI 生成」。
 
+### 方式二：Docker Compose 一键部署（容器形态）
+
+本地开发用上面两步；想直接跑「部署形态」（含 nginx 同源反代、健康检查、数据卷）用这个：
+
+```bash
+cd interview-trainer
+cp .env.example .env
+
+# 生成强随机 JWT 密钥并填入 .env（占位值会拒绝启动）
+python -c "import secrets;print(secrets.token_urlsafe(48))"
+
+docker compose up -d --build      # 首次构建约 5–10 分钟（后端依赖较重）
+```
+
+打开 **http://localhost:8080**（宿主端口可用 `.env` 的 `APP_PORT` 改）。
+
+- **同源**：nginx 托管前端静态资源并把 `/api` 反代到后端容器，不需要 CORS，也没有跨域 cookie 问题
+- **持久化**：数据在 named volume `app-data`（SQLite + ChromaDB）；`docker compose down` 不丢数据，`down -v` 才会清空
+- **首启**：空库启动，注册账号后后台自动载入内置内容（19 篇语料 / 207 题 / 20 条评测用例），约 30–60 秒
+- **安全**：容器以 `APP_ENV=production` 启动，`JWT_SECRET` 为占位值或短于 32 位时**直接拒绝启动**
+- 常用命令：`docker compose ps`（健康状态）、`docker compose logs -f backend`、`docker compose exec backend python seed.py --builtin`（补演示账号 demo/demo123）
+
 ### 一键体验路径
 
 1. **知识库** → 查看 19 篇内置语料 + 8 条演示资料 → 文本/文件（.txt/.md/.pdf/.docx）/网页链接三种方式录入 → 自动分块向量化 → AI 出题
@@ -182,12 +204,15 @@ EMBEDDING_MODEL=BAAI/bge-m3
 ```bash
 cd backend
 
-# 单元测试（169 个）：分块 / 文本相似度 / 评分器 / 规则出题 / SM-2 / 导入 / 讲题 / BM25 / 检索 / 掌握度 / 内置内容 / 难度自适应 / 内置评测预置
+# 单元测试（180 个）：分块 / 文本相似度 / 评分器 / 规则出题 / SM-2 / 导入 / 讲题 / BM25 / 检索 / 掌握度 / 内置内容 / 难度自适应 / 内置评测预置 / JWT 守卫
 python -m pytest
 
-# 全链路 API 冒烟测试（124 项断言，可重复执行）
+# 全链路 API 冒烟测试（演示模式 123 项断言，配置 LLM 后讲题分支多 1 项 = 124，可重复执行）
 # 需先启动后端：uvicorn app.main:app --port 8000
-python scripts/smoke_test.py
+python scripts/smoke_test.py            # 打容器时：SMOKE_BASE=http://127.0.0.1:8080/api python scripts/smoke_test.py
+
+# 推送前脱敏扫描（开源仓库必跑；CI 也会跑）
+python scripts/check_secrets.py
 
 # 浏览器 E2E（需前端 dev server 运行中，见 scripts/e2e_test.js 头部说明）
 ```
@@ -196,10 +221,12 @@ python scripts/smoke_test.py
 
 | 验证项 | 结果 |
 |---|---|
-| `pytest` 单元测试 | **169 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4 + BM25 7 + 检索 19 + 评测 9 + 掌握度 24 + 内置内容 14 + 难度自适应 8 + 内置评测预置 7） |
-| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/检索评测/掌握度/内置内容/内置评测/边界） | **124/124 通过** |
+| `pytest` 单元测试 | **180 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4 + BM25 7 + 检索 19 + 评测 9 + 掌握度 24 + 内置内容 14 + 难度自适应 8 + 内置评测预置 7 + JWT 守卫 11） |
+| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/检索评测/掌握度/内置内容/内置评测/边界） | **123/123 通过**（演示模式口径；配置 LLM 后讲题 SSE 分支多 1 项 = 124） |
 | 前端 `tsc --noEmit` + `vite build` | **通过，0 错误** |
 | 浏览器 E2E（Edge，全页面 + 完整考试 + 审核流 + 导入错误路径 + 讲题 + 检索评测 + 掌握度定向练习 + 内置内容 + 难度蓝图组卷 + 内置评测开箱即用） | **18/18 通过** |
+| 容器化验收（v1.9） | `docker compose up -d --build` 后：走 nginx 8080 健康 200、SPA 深链 200、容器内 `uid=10001`、冒烟 123/123、`restart` 后原账号仍可登录；镜像 backend **886 MB** / frontend **77 MB** |
+| 推送前脱敏扫描 | `scripts/check_secrets.py` 全量扫描通过（密钥、本机绝对路径、私钥块） |
 
 ---
 
@@ -208,8 +235,12 @@ python scripts/smoke_test.py
 ```
 interview-trainer/
 ├── README.md                          # 本文档
+├── docker-compose.yml                 # 一键部署：backend + frontend/nginx + 数据卷
+├── .env.example                       # 部署配置样例（JWT/端口/LLM）
+├── .github/workflows/ci.yml           # 脱敏扫描 / 单测 / 冒烟 / 前端构建 / 镜像构建
+├── scripts/check_secrets.py           # 推送前脱敏扫描（密钥/绝对路径/私钥块）
 ├── docs/
-│   ├── 01-需求分析与架构设计.md        # 需求/架构/ER/API 契约/选型对比
+│   ├── 01-需求分析与架构设计.md        # 需求/架构/ER/API 契约/选型对比/部署架构
 │   ├── 05-v1.5-检索增强与评测.md
 │   ├── 06-v1.6-掌握度与定向训练.md
 │   ├── 07-v1.7-内置知识库与题库.md
@@ -217,14 +248,18 @@ interview-trainer/
 │   ├── 09-v1.9-工程化与部署.md         # 规划：Docker Compose + CI
 │   └── screenshots/                   # E2E 运行截图
 ├── backend/
+│   ├── Dockerfile                     # 两阶段 + 非 root + healthcheck
 │   ├── app/                           # FastAPI 应用（routers/services/models）
 │   ├── data/builtin/                  # 内置语料 + 手写精选题库（按技术域分文件）
 │   ├── tests/                         # pytest 单元测试
-│   ├── scripts/smoke_test.py          # 全链路 API 冒烟测试
+│   ├── scripts/smoke_test.py          # 全链路 API 冒烟测试（支持 SMOKE_BASE）
 │   ├── seed.py                        # 演示数据种子（demo/demo123）
-│   ├── requirements.txt
-│   └── .env.example                   # LLM/Embedding 配置样例
+│   ├── requirements.txt               # 运行依赖
+│   ├── requirements-dev.txt           # 开发/测试依赖（含 pytest）
+│   └── .env.example                   # 本地开发配置样例（LLM/Embedding）
 └── frontend/
+    ├── Dockerfile                     # node 构建 → nginx 托管
+    ├── nginx.conf                     # SPA fallback + /api 反代 + SSE 关缓冲
     ├── src/pages/                     # 13 个业务页面（含系统配置、检索评测、掌握度）
     └── src/api/                       # axios 客户端 + 类型定义
 ```

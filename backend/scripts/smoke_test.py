@@ -1,12 +1,14 @@
 """全链路 API 冒烟测试：登录 -> 录入 -> 出题 -> 组卷 -> 考试 -> 评分 -> 分析。"""
 
 import json
+import os
 import sys
 import time
 
 import httpx
 
-BASE = "http://127.0.0.1:8000/api"
+# 默认打本机 8000；容器/CI 里用 SMOKE_BASE 指向实际地址（如 http://127.0.0.1:8080/api）
+BASE = os.environ.get("SMOKE_BASE", "http://127.0.0.1:8000/api")
 passed = 0
 failed = 0
 

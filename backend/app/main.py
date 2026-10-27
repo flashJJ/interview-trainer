@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_settings
+from .config import assert_jwt_secret, get_settings
 from .database import init_db
 from .routers import (
     analytics,
@@ -27,6 +27,8 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # 生产环境占位密钥直接拒绝启动（开发环境仅告警）
+    assert_jwt_secret(settings)
     init_db()
     mode = "AI 模式（LLM + Embedding API）" if get_llm().enabled else "演示模式（内置规则引擎）"
     print(f"[startup] {settings.app_name} 已启动，运行模式：{mode}")
