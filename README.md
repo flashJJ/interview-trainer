@@ -140,6 +140,33 @@ EMBEDDING_MODEL=BAAI/bge-m3
 已验证兼容：DeepSeek、通义千问（dashscope compatible-mode）、Moonshot、OpenAI。
 重启后端后，出题与填空评分自动切换为 LLM 通道（题目徽标显示「AI 生成」）。
 
+### 接入本地 Embedding（Ollama，可选，推荐自用）
+
+不想申请云端 Key 时，本机跑一个 embedding 模型即可——Ollama 暴露 OpenAI 兼容的 `/v1/embeddings`：
+
+```bash
+ollama pull qwen3-embedding:0.6b      # 1024 维，常驻显存约 2.4 GB
+```
+
+```ini
+EMBEDDING_BASE_URL=http://localhost:11434/v1              # 容器内改 http://host.docker.internal:11434/v1
+EMBEDDING_API_KEY=ollama                                   # 任意非空串（Ollama 不校验）
+EMBEDDING_MODEL=qwen3-embedding:0.6b
+```
+
+**换 Embedding 必须重建向量**：ChromaDB 的维度由首次写入决定，384 → 1024 会直接报维度不匹配。
+
+```bash
+cd backend
+python scripts/reindex_embeddings.py --dry-run   # 目标维度 vs 存储维度
+python scripts/reindex_embeddings.py --reset     # 重建集合 + 全量重算（只重算，不重新分块）
+# 然后重启后端服务（进程内 collection 句柄已失效）
+```
+
+> ⚠️ 迁移**不要重新分块**：会让检索评测用例的 `expected_ids` 全部失效，Recall 会连同 BM25 一起归零。
+> 实测（20 条内置评测集）：向量通道 Recall@5 **0.233 → 0.625**、MRR **0.358 → 0.796**，详见 `docs/10`。
+> 同时注意：真实向量会把「同领域但答错」也推到 0.5+，填空评分阈值已改为按实现分档（见 `grader.py`）。
+
 ---
 
 ## 3. 功能架构
@@ -221,8 +248,9 @@ python scripts/check_secrets.py
 
 | 验证项 | 结果 |
 |---|---|
-| `pytest` 单元测试 | **180 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4 + BM25 7 + 检索 19 + 评测 9 + 掌握度 24 + 内置内容 14 + 难度自适应 8 + 内置评测预置 7 + JWT 守卫 11） |
-| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/检索评测/掌握度/内置内容/内置评测/边界） | **123/123 通过**（演示模式口径；配置 LLM 后讲题 SSE 分支多 1 项 = 124） |
+| `pytest` 单元测试 | **190 passed**（SM-2 13 + 导入解析 10 + 讲题上下文 4 + BM25 7 + 检索 19 + 评测 9 + 掌握度 24 + 内置内容 14 + 难度自适应 8 + 内置评测预置 7 + JWT 守卫 11 + 选项前缀 6 + 向量存储迁移 3 + 语义阈值 1 等） |
+| API 冒烟测试（认证/录入/导入/出题/审核/组卷/考试/评分/分析/配置/错题本/讲题/检索评测/掌握度/内置内容/内置评测/边界） | **125/125 通过**（真实 LLM + 本地 Embedding 模式；演示模式 123，仅配 LLM 124） |
+| 检索评测（20 条内置用例，149 块） | 接入 `qwen3-embedding:0.6b` 后向量通道 **Recall@5 0.233 → 0.625**、MRR 0.358 → 0.796；BM25 作为对照组保持 0.458 / 0.800 不变 |
 | 前端 `tsc --noEmit` + `vite build` | **通过，0 错误** |
 | 浏览器 E2E（Edge，全页面 + 完整考试 + 审核流 + 导入错误路径 + 讲题 + 检索评测 + 掌握度定向练习 + 内置内容 + 难度蓝图组卷 + 内置评测开箱即用） | **18/18 通过** |
 | 容器化验收（v1.9） | `docker compose up -d --build` 后：走 nginx 8080 健康 200、SPA 深链 200、容器内 `uid=10001`、冒烟 123/123、`restart` 后原账号仍可登录；镜像 backend **886 MB** / frontend **77 MB** |
@@ -246,6 +274,7 @@ interview-trainer/
 │   ├── 07-v1.7-内置知识库与题库.md
 │   ├── 08-v1.8-难度自适应组卷与内置评测预置.md
 │   ├── 09-v1.9-工程化与部署.md         # 规划：Docker Compose + CI
+│   ├── 10-v1.9.1-本地向量接入与评测对比.md  # Ollama 向量 + Recall/MRR 前后对比
 │   └── screenshots/                   # E2E 运行截图
 ├── backend/
 │   ├── Dockerfile                     # 两阶段 + 非 root + healthcheck
@@ -253,6 +282,7 @@ interview-trainer/
 │   ├── data/builtin/                  # 内置语料 + 手写精选题库（按技术域分文件）
 │   ├── tests/                         # pytest 单元测试
 │   ├── scripts/smoke_test.py          # 全链路 API 冒烟测试（支持 SMOKE_BASE）
+│   ├── scripts/reindex_embeddings.py  # 换 Embedding 后重建向量（只重算不重分块）
 │   ├── seed.py                        # 演示数据种子（demo/demo123）
 │   ├── requirements.txt               # 运行依赖
 │   ├── requirements-dev.txt           # 开发/测试依赖（含 pytest）

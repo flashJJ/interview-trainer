@@ -106,3 +106,34 @@ class VectorStore:
     # ---------- 统计 ----------
     def counts(self) -> dict:
         return {KB_COLLECTION: self._kb.count(), QUESTION_COLLECTION: self._questions.count()}
+
+    # ---------- 维度与重建（切换 Embedding 提供方时使用）----------
+    def stored_dims(self) -> dict:
+        """各集合当前存储的向量维度；空集合返回 None。
+
+        ChromaDB 的维度由首次写入决定，切换模型（如 384 → 1024）后必须先重建集合。
+        """
+        dims: dict[str, int | None] = {}
+        for name, col in ((KB_COLLECTION, self._kb), (QUESTION_COLLECTION, self._questions)):
+            if col.count() == 0:
+                dims[name] = None
+                continue
+            try:
+                res = col.get(limit=1, include=["embeddings"])
+                embeddings = res.get("embeddings")
+                dims[name] = len(embeddings[0]) if embeddings is not None and len(embeddings) else None
+            except Exception:  # noqa: BLE001 - 旧版本返回格式差异
+                dims[name] = None
+        return dims
+
+    def reset_collections(self) -> None:
+        """删除并重建两个集合（维度变化后必须调用，否则 upsert 会报维度不匹配）。"""
+        for name in (KB_COLLECTION, QUESTION_COLLECTION):
+            try:
+                self._client.delete_collection(name)
+            except Exception:  # noqa: BLE001 - 集合不存在时忽略
+                pass
+        self._kb = self._client.get_or_create_collection(KB_COLLECTION, embedding_function=None)
+        self._questions = self._client.get_or_create_collection(
+            QUESTION_COLLECTION, embedding_function=None
+        )

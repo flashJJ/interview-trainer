@@ -6,11 +6,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# 测试与推送脚本不进运行镜像
+# 测试与推送脚本不进运行镜像（运维脚本 reindex_embeddings 例外，需要在容器内可执行）
 tests/
 conftest.py
 pytest.ini
-scripts/
+scripts/*
+!scripts/reindex_embeddings.py
 
 # 运行时数据（注意：data/builtin 是交付物，必须保留）
 data/chroma/
