@@ -1,0 +1,50 @@
+# 一键部署：docker compose up -d --build
+# 首次启动前先 cp .env.example .env 并设置 JWT_SECRET（占位值会拒绝启动）
+name: interview-trainer
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: interview-trainer-backend:1.9
+    restart: unless-stopped
+    environment:
+      # 生产环境：JWT 仍为占位值则拒绝启动
+      APP_ENV: production
+      # 注意是四个斜杠：sqlite:/// 是相对路径，绝对路径必须 sqlite:////
+      DATABASE_URL: sqlite:////app/data/interview_trainer.db
+      CHROMA_DIR: /app/data/chroma
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET（强随机串，至少 32 位）}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+    volumes:
+      # named volume：Windows/macOS 的 bind mount 上 SQLite WAL 容易出锁异常
+      - app-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3).status==200 else 1)
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+    image: interview-trainer-frontend:1.9
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:80"
+
+volumes:
+  app-data:

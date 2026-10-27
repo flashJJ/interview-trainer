@@ -8,9 +8,11 @@
    3. node e2e_test.js（脚本输出截图到 docs/screenshots/） */
 const { chromium } = require('playwright');
 const fs = require('fs');
+const path = require('path');
 
 const BASE = 'http://localhost:5173';
-const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshots';
+// 相对脚本位置解析，避免把本机绝对路径写进开源仓库
+const OUT = path.resolve(__dirname, '../../docs/screenshots');
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -80,11 +82,37 @@ const OUT = 'E:/code/traeWork/bossSayGoodForMe/interview-trainer/docs/screenshot
   await page.screenshot({ path: `${OUT}/03-questions.png` });
 
   await step('出题审核流（知识库出题 -> 待审核 -> 通过入池）', async () => {
-    // 1. 知识库页对第一条资料 AI 出题（默认全题型，每题型 2 道）
-    // 不写死标题：列表顺序会随内置语料扩充变化，取首行即可
+    // 出题去重按「用户 + 内容」判定：反复跑同一个库时，固定资料的题目会被全部跳过
+    // （created=0），待审队列于是为空——那是测试数据问题，不是功能缺陷。
+    // 所以先造一条带时间戳的唯一资料，保证本步每次都有新题进待审。
+    const sampleTitle = `E2E 审核流样本 ${Date.now()}`;
+    const sample = await page.evaluate(async (title) => {
+      const token = localStorage.getItem('it_token');
+      const resp = await fetch('/api/knowledge/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title,
+          content:
+            `${title}。本节讨论 HTTP 缓存策略：Cache-Control 的 max-age 指定新鲜期，` +
+            `no-store 表示完全不缓存；ETag 用于协商缓存，返回 304 表示可复用本地副本。` +
+            `编号 ${title.slice(-13)} 的样本仅用于端到端测试出题链路，不承载真实业务含义。`,
+        }),
+      });
+      if (!resp.ok) throw new Error(`创建测试资料失败：${await resp.text()}`);
+      return resp.json();
+    }, sampleTitle);
+    if (!sample.id) throw new Error('创建测试资料未返回 id');
+
+    // 1. 知识库列表按 id 倒序，新建资料即首行；对该行 AI 出题（默认全题型，每题型 2 道）
     await menuClick(/知\s*识\s*库/);
     await page.locator('.ant-table-tbody tr:has(td)').first().waitFor({ timeout: 10000 });
     const firstRow = page.locator('.ant-table-tbody tr:has(td)').first();
+    if (!(await firstRow.textContent()).includes(sampleTitle)) {
+      // 缓存命中导致列表未刷新时，重载一次（新建条目一定在首位）
+      await page.reload();
+      await page.locator('.ant-table-tbody tr:has(td)').first().waitFor({ timeout: 10000 });
+    }
     await firstRow.getByRole('button', { name: /AI\s*出\s*题/ }).click();
     const genModal = page.getByRole('dialog');
     await genModal.waitFor({ timeout: 5000 });
