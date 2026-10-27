@@ -214,6 +214,7 @@ interview-trainer/
 │   ├── 06-v1.6-掌握度与定向训练.md
 │   ├── 07-v1.7-内置知识库与题库.md
 │   ├── 08-v1.8-难度自适应组卷与内置评测预置.md
+│   ├── 09-v1.9-工程化与部署.md         # 规划：Docker Compose + CI
 │   └── screenshots/                   # E2E 运行截图
 ├── backend/
 │   ├── app/                           # FastAPI 应用（routers/services/models）
