@@ -17,6 +17,19 @@ from .llm_client import LLMClient, extract_json
 MAX_SCORE_PER_QUESTION = 10.0
 CORRECT_THRESHOLD = 0.6  # 得分率 ≥ 60% 记为正确
 
+# 语义分档阈值不能跨模型通用：哈希向量看字面重合，真实模型看整体语义，
+# 后者会把「同领域但答错」也推到 0.5 以上。实测（qwen3-embedding:0.6b，1024 维）：
+#   近似「布隆过滤机制 / 布隆过滤器」      0.956 → 应满分
+#   相关但错误「缓存空值 / 布隆过滤器」    0.539 → 应 0 分
+#   完全无关「TCP 三次握手 / UDP 无连接」 0.678 → 应 0 分
+# 所以 api 模式阈值整体上移；local（内置哈希）保持原标定不变。
+SEMANTIC_THRESHOLDS = {"api": (0.80, 0.92), "local": (0.50, 0.80)}
+
+
+def semantic_thresholds(mode: str) -> tuple[float, float]:
+    """按 Embedding 实现返回 (半分阈值, 满分阈值)。"""
+    return SEMANTIC_THRESHOLDS.get(mode or "local", SEMANTIC_THRESHOLDS["local"])
+
 _TRUE_TOKENS = ("正确", "对", "是", "true", "t", "yes", "y", "√", "✓", "1")
 _FALSE_TOKENS = ("错误", "不对", "不正确", "不是", "否", "错", "false", "f", "no", "n", "×", "✗", "0")
 
@@ -123,12 +136,13 @@ class Grader:
             similarity = text_utils.cosine(
                 self.embeddings.embed(answer), self.embeddings.embed(std)
             )
-            if similarity >= 0.8:
+            half, full = semantic_thresholds(getattr(self.embeddings, "mode", "local"))
+            if similarity >= full:
                 return GradeResult(
                     MAX_SCORE_PER_QUESTION, MAX_SCORE_PER_QUESTION, True,
                     f"语义匹配度 {similarity:.0%}，与标准答案一致", "rule",
                 )
-            if similarity >= 0.5:
+            if similarity >= half:
                 return GradeResult(
                     MAX_SCORE_PER_QUESTION / 2, MAX_SCORE_PER_QUESTION, False,
                     f"语义匹配度 {similarity:.0%}，部分正确（标准答案：{std}）", "rule",

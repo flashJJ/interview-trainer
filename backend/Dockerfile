@@ -40,6 +40,7 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=10001:10001 app ./app
 COPY --chown=10001:10001 seed.py ./
+COPY --chown=10001:10001 scripts/reindex_embeddings.py ./scripts/
 # 内置语料与题库是交付物，必须进镜像；运行时数据（db/chroma）走卷挂载
 COPY --chown=10001:10001 data/builtin ./data/builtin
 RUN mkdir -p /app/data/chroma && chown -R 10001:10001 /app/data

@@ -4,12 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.config import EffectiveSettings
+from app.services.embeddings import EmbeddingService
 from app.services.grader import (
     Grader,
     extract_choice_letter,
     normalize_judge_answer,
+    semantic_thresholds,
 )
-from app.services.runtime import get_embeddings
 
 
 def make_question(q_type, answer, content="题干"):
@@ -23,7 +25,19 @@ def make_question(q_type, answer, content="题干"):
 
 @pytest.fixture(scope="module")
 def grader():
-    return Grader(embeddings=get_embeddings())
+    # 固定用内置确定性向量：单测不能依赖外部 Embedding 服务。
+    # 真实模型的相似度分布不同（见 semantic_thresholds 的标定说明），
+    # 否则同一批断言会随「当前配置了哪个模型」而变红。
+    local = EmbeddingService(settings=EffectiveSettings(embedding_base_url="", embedding_api_key=""))
+    return Grader(embeddings=local)
+
+
+class TestSemanticThresholds:
+    def test_api_mode_is_stricter(self):
+        # 真实模型下「同领域但答错」也有 0.6+，阈值必须上移
+        assert semantic_thresholds("api") == (0.80, 0.92)
+        assert semantic_thresholds("local") == (0.50, 0.80)
+        assert semantic_thresholds("") == (0.50, 0.80)
 
 
 class TestNormalizers:
