@@ -147,7 +147,8 @@ def main() -> None:
 
         resp = client.post(
             "/questions/generate",
-            json={"entry_id": entry_id, "types": ["judge"], "count_per_type": 2},
+            # 要 3 道：真实 LLM 偶尔只成功解析出 1 道，下面「批量拒绝」就无从验证
+            json={"entry_id": entry_id, "types": ["judge"], "count_per_type": 3},
             headers=headers,
         )
         gen2 = resp.json()
@@ -183,6 +184,9 @@ def main() -> None:
                 headers=headers,
             )
             check("批量审核拒绝", resp.status_code == 200 and resp.json()["updated"] == 1, resp.text[:100])
+        else:
+            # 不静默跳过：否则总数会莫名少 1 项，排查时以为是脚本坏了
+            print("    SKIP  只生成了 1 道待审题，跳过「批量审核拒绝」断言")
 
         # ---------- 4. 组卷 ----------
         print("[4] 随机组卷")
