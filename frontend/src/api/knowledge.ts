@@ -45,7 +45,10 @@ export const knowledgeApi = {
       const form = new FormData()
       form.append('file', file)
       if (title) form.append('title', title)
-      const { data } = await http.post<KnowledgeEntry>('/knowledge/entries/upload', form)
+      // 扫描件 PDF 会在后端逐页 OCR（约 4–6 秒/页），默认 60s 全局超时不够
+      const { data } = await http.post<KnowledgeEntry>('/knowledge/entries/upload', form, {
+        timeout: 300_000,
+      })
       return data
     } catch (err) {
       throw new Error(errMsg(err, '上传文件失败'))
