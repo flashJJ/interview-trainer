@@ -18,6 +18,10 @@ ENV PATH="/opt/venv/bin:${PATH}"
 WORKDIR /build
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+# rapidocr 依赖 opencv-python（GUI 版），它需要 libxcb/libGL 等 X11 库；
+# 服务端只做图像解码，换 headless 版即可：去掉 X11 依赖，同时省掉几十 MB
+RUN pip uninstall -y opencv-python \
+    && pip install --no-cache-dir "opencv-python-headless>=5.0.0"
 
 # ---------- runtime ----------
 FROM python:3.13-slim AS runtime

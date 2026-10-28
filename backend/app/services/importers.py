@@ -1,17 +1,22 @@
 """多格式资料导入解析：PDF / DOCX / 网页链接。
 
-- PDF：pypdf 提取文本层（扫描件无文本层时明确报错，不做 OCR）
+- PDF：pypdf 提取文本层；文本层几乎为空（扫描件/图片型）时自动回退 OCR
 - DOCX：python-docx 提取段落文本
 - 网页：httpx 抓取 + readability-lxml 提取正文（去广告/导航/页脚）
 """
 
 import io
+import logging
 import re
 
 import httpx
 from docx import Document
 from pypdf import PdfReader
 from readability import Document as ReadabilityDocument
+
+from .ocr import is_available, looks_like_scan, ocr_pdf
+
+LOG = logging.getLogger(__name__)
 
 MAX_URL_BYTES = 10 * 1024 * 1024  # 网页内容上限 10MB
 URL_TIMEOUT = 30  # 秒
@@ -21,7 +26,7 @@ _NOISE_LINE_RE = re.compile(r"^(登录|注册|首页|首页\s*\|\s*.*|版权所�
 
 
 def extract_pdf_text(raw: bytes) -> str:
-    """提取 PDF 文本层内容。"""
+    """提取 PDF 文本；文本层几乎为空时自动回退 OCR（图片型/扫描件）。"""
     try:
         reader = PdfReader(io.BytesIO(raw))
     except Exception as exc:  # noqa: BLE001
@@ -38,10 +43,24 @@ def extract_pdf_text(raw: bytes) -> str:
         except Exception:  # noqa: BLE001 - 单页失败不阻塞整体
             continue
     text = "\n".join(parts)
+    page_count = len(reader.pages)
+
+    # 文本层几乎为空 => 按扫描件处理，回退 OCR
+    if looks_like_scan(text, page_count):
+        if not is_available():
+            raise ValueError(
+                "未能从 PDF 提取到文本（疑似扫描件/图片型 PDF），且 OCR 依赖未安装"
+            )
+        text, meta = ocr_pdf(raw)
+        if meta["truncated"]:
+            LOG.warning(
+                "扫描件 OCR 截断：共 %s 页，仅识别前 %s 页（可用 OCR_MAX_PAGES 调整）",
+                meta["pages"],
+                meta["pages_ocr"],
+            )
+
     if len(text.strip()) < 30:
-        raise ValueError(
-            "未能从 PDF 提取到文本（可能是扫描件/图片型 PDF，暂不支持 OCR）"
-        )
+        raise ValueError("未能从 PDF 提取到文本（可能是扫描件、纯图片或空文档）")
     return text
 
 
